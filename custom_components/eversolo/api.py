@@ -406,8 +406,7 @@ class EversoloApiClient:
 
     async def async_get_play_queue(self) -> list[dict[str, Any]]:
         """Return the current play queue."""
-        result = await self._request_json("/ZidooMusicControl/v2/getPlayQueue")
-        return self._extract_items(result)
+        return await self._request_items("/ZidooMusicControl/v2/getPlayQueue")
 
     async def async_play_queue_item(self, index: int) -> None:
         """Play a queue item by index."""
@@ -417,34 +416,30 @@ class EversoloApiClient:
 
     async def async_get_favorites(self) -> list[dict[str, Any]]:
         """Return local-library favorite tracks."""
-        result = await self._request_json(
+        return await self._request_items(
             "/ZidooMusicControl/v2/getFavorites",
             {"start": 0, "count": 200, "sort": 0},
         )
-        return self._extract_items(result)
 
     async def async_get_song_lists(self) -> list[dict[str, Any]]:
         """Return local playlists."""
-        result = await self._request_json("/ZidooMusicControl/v2/getSongLists")
-        return self._extract_items(result)
+        return await self._request_items("/ZidooMusicControl/v2/getSongLists")
 
     async def async_get_song_list_musics(
         self, playlist_id: str | int
     ) -> list[dict[str, Any]]:
         """Return tracks in a local playlist."""
-        result = await self._request_json(
+        return await self._request_items(
             "/ZidooMusicControl/v2/getSongListMusics",
             {"id": playlist_id, "start": 0, "count": 500, "sort": 0},
         )
-        return self._extract_items(result)
 
     async def async_search_music(self, query: str) -> list[dict[str, Any]]:
         """Search the local music library."""
-        result = await self._request_json(
+        return await self._request_items(
             "/ZidooMusicControl/v2/searchMusicV2",
             {"key": query, "start": 0, "count": 100},
         )
-        return self._extract_items(result)
 
     async def async_play_library_item(
         self,
@@ -493,8 +488,12 @@ class EversoloApiClient:
         return data, content_type
 
     @staticmethod
-    def _extract_items(response: Mapping[str, Any]) -> list[dict[str, Any]]:
+    def _extract_items(
+        response: Mapping[str, Any] | list[Any],
+    ) -> list[dict[str, Any]]:
         """Extract collection items from firmware-specific response wrappers."""
+        if isinstance(response, list):
+            return [dict(item) for item in response if isinstance(item, Mapping)]
         for key in ("array", "items", "musics", "data", "list"):
             value = response.get(key)
             if isinstance(value, list):
@@ -505,10 +504,27 @@ class EversoloApiClient:
                     return nested
         return []
 
+    async def _request_items(
+        self, path: str, params: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Return collection items from an object wrapper or a root JSON array."""
+        return self._extract_items(await self._request_json_value(path, params))
+
     async def _request_json(
         self, path: str, params: Mapping[str, Any] | None = None
     ) -> dict[str, Any]:
         """Run a GET request and validate its JSON object response."""
+        decoded = await self._request_json_value(path, params)
+        if not isinstance(decoded, dict):
+            raise EversoloApiClientResponseError(
+                f"Device returned a non-object response for {path}"
+            )
+        return decoded
+
+    async def _request_json_value(
+        self, path: str, params: Mapping[str, Any] | None = None
+    ) -> dict[str, Any] | list[Any]:
+        """Run a GET request and accept firmware JSON objects or arrays."""
         raw, _content_type = await self._request_raw(self._url(path), params)
         try:
             decoded = json.loads(raw)
@@ -516,11 +532,12 @@ class EversoloApiClient:
             raise EversoloApiClientResponseError(
                 f"Device returned invalid JSON for {path}"
             ) from err
-        if not isinstance(decoded, dict):
+        if not isinstance(decoded, (dict, list)):
             raise EversoloApiClientResponseError(
-                f"Device returned a non-object response for {path}"
+                f"Device returned an unsupported JSON response for {path}"
             )
-        self._raise_for_device_status(decoded)
+        if isinstance(decoded, dict):
+            self._raise_for_device_status(decoded)
         return decoded
 
     async def _request_bytes(
