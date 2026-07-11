@@ -220,6 +220,80 @@ async def test_song_lists_accepts_root_json_array(client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_streaming_apps_include_music_and_favorites(client) -> None:
+    """Application discovery combines streaming and installed-app endpoints."""
+    client._request_json_value = AsyncMock(
+        side_effect=[
+            {
+                "data": [
+                    {
+                        "appName": "Qobuz",
+                        "packageName": "com.qobuz.music",
+                        "isCanOpen": True,
+                    }
+                ]
+            },
+            {
+                "apps": [
+                    {
+                        "label": "My Favorites",
+                        "packageName": "com.eversolo.mycollection.app",
+                        "isCanOpen": True,
+                        "isSystemApp": True,
+                    },
+                    {
+                        "label": "Apple Music",
+                        "packageName": "com.apple.android.music",
+                        "isCanOpen": True,
+                    },
+                    {
+                        "label": "Chrome",
+                        "packageName": "com.android.chrome",
+                        "isCanOpen": True,
+                    },
+                ]
+            },
+            api.EversoloApiClientUnsupportedError(),
+        ]
+    )
+
+    apps = await client.async_get_streaming_apps()
+
+    assert [app["label"] for app in apps] == [
+        "My Favorites",
+        "Apple Music",
+        "Qobuz",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_open_app_uses_structured_package_parameter(client) -> None:
+    """Application package names are sent as encoded query parameters."""
+    client._request_bytes = AsyncMock(return_value=b"")
+
+    await client.async_open_app("com.apple.android.music")
+
+    assert client._request_bytes.await_args.args == (
+        "/ControlCenter/Apps/openApp",
+        {"packageName": "com.apple.android.music"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_open_app_falls_back_to_newer_control_center(client) -> None:
+    """Application launch supports both control-center URL families."""
+    client._request_bytes = AsyncMock(
+        side_effect=[api.EversoloApiClientUnsupportedError(), b""]
+    )
+
+    await client.async_open_app("com.qobuz.music")
+
+    assert client._request_bytes.await_args_list[1].args[0] == (
+        "/ZidooControlCenter/Apps/openApp"
+    )
+
+
+@pytest.mark.asyncio
 async def test_control_commands_use_structured_parameters(client) -> None:
     """Control values are passed as query parameters, not interpolated URLs."""
     client._request_bytes = AsyncMock(return_value=b"")

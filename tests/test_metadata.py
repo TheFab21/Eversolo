@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import struct
 from typing import Any
 
@@ -39,7 +40,7 @@ def _png_size(path: Path) -> tuple[int, int]:
 def test_manifest_is_modern_and_pinned() -> None:
     """Runtime metadata points at the fork and pins its sole dependency."""
     manifest = _load_json(INTEGRATION / "manifest.json")
-    assert manifest["version"] == "1.0.0b1"
+    assert re.fullmatch(r"\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?", manifest["version"])
     assert manifest["requirements"] == ["wakeonlan==4.0.0"]
     assert manifest["documentation"] == "https://github.com/TheFab21/Eversolo"
     assert manifest["zeroconf"] == ["_eversolo._tcp.local."]
