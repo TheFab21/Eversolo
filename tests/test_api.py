@@ -91,6 +91,7 @@ def test_extract_screen_state(client, response, expected) -> None:
 
 def test_extract_items_handles_firmware_wrappers(client) -> None:
     """Collections may be wrapped under several firmware-specific keys."""
+    assert client._extract_items([{"id": 0}]) == [{"id": 0}]
     assert client._extract_items({"data": {"array": [{"id": 1}]}}) == [{"id": 1}]
     assert client._extract_items({"items": [{"id": 2}]}) == [{"id": 2}]
     assert client._extract_items({"data": "invalid"}) == []
@@ -185,7 +186,7 @@ async def test_input_output_normalization(client) -> None:
 @pytest.mark.asyncio
 async def test_library_endpoints_and_play_command(client) -> None:
     """Library collection wrappers and playback parameters remain consistent."""
-    client._request_json = AsyncMock(return_value={"array": [{"id": 42}]})
+    client._request_json_value = AsyncMock(return_value={"array": [{"id": 42}]})
     client._request_bytes = AsyncMock(return_value=b"")
 
     assert await client.async_get_favorites() == [{"id": 42}]
@@ -206,6 +207,16 @@ async def test_library_endpoints_and_play_command(client) -> None:
         "trackIndex": 3,
         "sort": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_song_lists_accepts_root_json_array(client) -> None:
+    """DMP-A6 firmware may return playlists as a root JSON array."""
+    client._request_raw = AsyncMock(
+        return_value=(b'[{"id": 42, "name": "Favorites"}]', "application/json")
+    )
+
+    assert await client.async_get_song_lists() == [{"id": 42, "name": "Favorites"}]
 
 
 @pytest.mark.asyncio
