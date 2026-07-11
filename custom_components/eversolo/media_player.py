@@ -377,6 +377,10 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
                     "queue",
                     await self.coordinator.client.async_get_play_queue(),
                 )
+            if kind == "apps":
+                return self._apps_browser(
+                    await self.coordinator.client.async_get_streaming_apps()
+                )
             if kind == "playlists":
                 return self._playlists_browser(
                     await self.coordinator.client.async_get_song_lists()
@@ -428,7 +432,9 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
         del media_type, enqueue, announce, kwargs
         request = self._decode_media_id(media_id)
         try:
-            if request.get("kind") == "queue_track":
+            if request.get("kind") == "app":
+                await self.coordinator.client.async_open_app(request["package_name"])
+            elif request.get("kind") == "queue_track":
                 await self.coordinator.client.async_play_queue_item(
                     int(request["index"])
                 )
@@ -459,7 +465,14 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
     ) -> tuple[bytes | None, str | None]:
         """Proxy local album art without accepting arbitrary URLs."""
         del media_content_type, media_content_id
-        if media_image_id is None or not media_image_id.isdigit():
+        if media_image_id is None:
+            return None, None
+        if media_image_id.startswith("app:"):
+            package_name = media_image_id.removeprefix("app:")
+            if not package_name:
+                return None, None
+            return await self.coordinator.client.async_get_app_icon(package_name)
+        if not media_image_id.isdigit():
             return None, None
         return await self.coordinator.client.async_get_image(
             self.coordinator.client.create_image_url_by_song_id(media_image_id)
@@ -485,11 +498,45 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
                     can_expand=True,
                 )
                 for kind, title in (
+                    ("apps", "Music apps & service favorites"),
                     ("favorites", "Favorites"),
                     ("playlists", "Playlists"),
                     ("queue", "Play queue"),
                 )
             ],
+        )
+
+    def _apps_browser(self, apps: list[dict[str, Any]]) -> BrowseMedia:
+        """Return installed streaming applications and Eversolo favorites."""
+        children = []
+        for app in apps:
+            package_name = str(app.get("packageName") or "")
+            if not package_name:
+                continue
+            media_id = self._encode_media_id(
+                {"kind": "app", "package_name": package_name}
+            )
+            children.append(
+                BrowseMedia(
+                    media_class=MediaClass.APP,
+                    media_content_id=media_id,
+                    media_content_type="eversolo_app",
+                    title=str(app.get("label") or package_name),
+                    can_play=True,
+                    can_expand=False,
+                    thumbnail=self.get_browse_image_url(
+                        "eversolo_app", media_id, f"app:{package_name}"
+                    ),
+                )
+            )
+        return BrowseMedia(
+            media_class=MediaClass.DIRECTORY,
+            media_content_id=self._encode_media_id({"kind": "apps"}),
+            media_content_type="eversolo",
+            title="Music apps & service favorites",
+            can_play=False,
+            can_expand=True,
+            children=children,
         )
 
     def _playlists_browser(self, playlists: list[dict[str, Any]]) -> BrowseMedia:

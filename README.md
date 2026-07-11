@@ -14,6 +14,7 @@ This fork modernizes the original [hchris1/Eversolo](https://github.com/hchris1/
 - Album artwork proxied through Home Assistant
 - Audiophile metadata: format, sample rate, bit depth, bitrate, channels, output codec, DSP, EQ, and MQA state
 - Browse and play the current queue, favorites, and local playlists
+- Launch installed streaming apps and Eversolo's cross-service **My Favorites** view
 - Search the Eversolo local music library
 - Dynamic input/output lists supplied by the device—nothing is hard-coded per model
 - Configurable power-off behavior: full shutdown or standby
@@ -26,6 +27,8 @@ This fork modernizes the original [hchris1/Eversolo](https://github.com/hchris1/
 ## Compatibility
 
 The integration uses the local HTTP API on port 9529. Capability detection is preferred over model-name checks, so unsupported controls remain hidden or unavailable.
+
+Streaming applications are discovered from the device at runtime. Apple Music, Qobuz, TIDAL, TuneIn, Amazon Music, and other services therefore appear only when installed or exposed by the current firmware. Provider credentials remain on the Eversolo; Home Assistant never receives them.
 
 Community API evidence covers:
 

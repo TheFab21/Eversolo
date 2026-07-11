@@ -15,6 +15,26 @@ from .const import LOGGER
 
 API_TIMEOUT = aiohttp.ClientTimeout(total=5)
 MAX_CONCURRENT_REQUESTS = 2
+FAVORITES_APP_PACKAGE = "com.eversolo.mycollection.app"
+MUSIC_APP_HINTS = (
+    "amazon music",
+    "apple music",
+    "calm radio",
+    "deezer",
+    "favorite",
+    "highresaudio",
+    "idagio",
+    "kkbox",
+    "music",
+    "presto",
+    "qobuz",
+    "radio paradise",
+    "soundcloud",
+    "sony",
+    "spotify",
+    "tidal",
+    "tunein",
+)
 
 
 class EversoloApiClientError(Exception):
@@ -441,6 +461,80 @@ class EversoloApiClient:
             {"key": query, "start": 0, "count": 100},
         )
 
+    async def async_get_streaming_apps(self) -> list[dict[str, Any]]:
+        """Return installed music applications across firmware generations."""
+        results = await asyncio.gather(
+            self._request_items(
+                "/ZidooMusicControl/v2/getStreamMediaAppList",
+                {"start": 0, "count": 100, "showMusicApp": "true", "sort": 4},
+            ),
+            self._request_items("/ControlCenter/Apps/getApps"),
+            self._request_items("/ZidooControlCenter/Apps/getApps"),
+            return_exceptions=True,
+        )
+        normalized: dict[str, dict[str, Any]] = {}
+        errors: list[EversoloApiClientError] = []
+        for source_index, result in enumerate(results):
+            if isinstance(result, EversoloApiClientError):
+                errors.append(result)
+                continue
+            if isinstance(result, Exception):
+                raise result
+            for app in result:
+                package_name = str(
+                    app.get("packageName")
+                    or app.get("package")
+                    or app.get("package_name")
+                    or ""
+                )
+                label = str(
+                    app.get("label")
+                    or app.get("appName")
+                    or app.get("name")
+                    or package_name
+                )
+                if not package_name or not label or app.get("isCanOpen") is False:
+                    continue
+                searchable = f"{label} {package_name}".casefold()
+                is_streaming_result = source_index == 0
+                is_favorites = package_name == FAVORITES_APP_PACKAGE
+                is_music_app = any(hint in searchable for hint in MUSIC_APP_HINTS)
+                if not (is_streaming_result or is_favorites or is_music_app):
+                    continue
+                normalized[package_name] = {
+                    **normalized.get(package_name, {}),
+                    **app,
+                    "label": label,
+                    "packageName": package_name,
+                    "isFavorites": is_favorites,
+                }
+
+        if not normalized and len(errors) == len(results):
+            raise errors[0]
+        return sorted(
+            normalized.values(),
+            key=lambda app: (
+                not bool(app.get("isFavorites")),
+                str(app["label"]).casefold(),
+            ),
+        )
+
+    async def async_open_app(self, package_name: str) -> None:
+        """Open an installed application on the Eversolo display."""
+        last_error: EversoloApiClientError | None = None
+        for path in (
+            "/ControlCenter/Apps/openApp",
+            "/ZidooControlCenter/Apps/openApp",
+        ):
+            try:
+                await self._request_bytes(path, {"packageName": package_name})
+                return
+            except EversoloApiClientError as err:
+                last_error = err
+        raise last_error or EversoloApiClientResponseError(
+            "No application-launch endpoint succeeded"
+        )
+
     async def async_play_library_item(
         self,
         item: Mapping[str, Any],
@@ -478,6 +572,25 @@ class EversoloApiClient:
         base = URL.build(scheme="http", host=self._host, port=self._port)
         return str(base.join(URL(path)))
 
+    async def async_get_app_icon(
+        self, package_name: str
+    ) -> tuple[bytes | None, str | None]:
+        """Fetch an installed application's icon across firmware variants."""
+        last_error: EversoloApiClientError | None = None
+        for path in (
+            "/ControlCenter/Apps/getAppIcon",
+            "/ZidooControlCenter/Apps/getAppIcon",
+        ):
+            try:
+                return await self._request_raw(
+                    self._url(path), {"packageName": package_name}
+                )
+            except EversoloApiClientError as err:
+                last_error = err
+        raise last_error or EversoloApiClientResponseError(
+            "No application-icon endpoint succeeded"
+        )
+
     async def async_get_image(self, url: str) -> tuple[bytes | None, str | None]:
         """Fetch a device-hosted image for Home Assistant's artwork proxy."""
         parsed = URL(url)
@@ -494,7 +607,17 @@ class EversoloApiClient:
         """Extract collection items from firmware-specific response wrappers."""
         if isinstance(response, list):
             return [dict(item) for item in response if isinstance(item, Mapping)]
-        for key in ("array", "items", "musics", "data", "list"):
+        for key in (
+            "array",
+            "items",
+            "musics",
+            "apps",
+            "appList",
+            "appData",
+            "data",
+            "list",
+            "result",
+        ):
             value = response.get(key)
             if isinstance(value, list):
                 return [dict(item) for item in value if isinstance(item, Mapping)]

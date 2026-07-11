@@ -10,7 +10,7 @@
 - Moved runtime state to ConfigEntry.runtime_data.
 - Added unique device configuration, reconfiguration, mDNS discovery, and standby options.
 - Added repeat, shuffle, rich audio metadata, artwork proxying, queue browsing, favorites, playlists, and library search.
+- Added dynamic streaming-app discovery, app icons, remote launch, and the Eversolo cross-service favorites launcher.
 - Added diagnostics, English/French translations, entity icons, and local light/dark brand assets.
 - Disabled redundant legacy command buttons by default while preserving unique IDs.
 - Added Ruff formatting, grouped Dependabot updates, and an initial API test suite.
-
