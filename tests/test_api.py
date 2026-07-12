@@ -227,7 +227,7 @@ async def test_streaming_apps_include_music_and_favorites(client) -> None:
             {
                 "data": [
                     {
-                        "appName": "Qobuz",
+                        "appName": "com.qobuz.music",
                         "packageName": "com.qobuz.music",
                         "isCanOpen": True,
                     }
@@ -273,15 +273,21 @@ async def test_open_app_uses_structured_package_parameter(client) -> None:
 
     await client.async_open_app("com.apple.android.music")
 
-    assert client._request_bytes.await_args.args == (
-        "/ControlCenter/Apps/openApp",
-        {"packageName": "com.apple.android.music"},
-    )
+    assert [call.args for call in client._request_bytes.await_args_list] == [
+        (
+            "/ZidooControlCenter/Apps/openApp",
+            {"packageName": "com.apple.android.music"},
+        ),
+        (
+            "/ControlCenter/Apps/openApp",
+            {"packageName": "com.apple.android.music"},
+        ),
+    ]
 
 
 @pytest.mark.asyncio
 async def test_open_app_falls_back_to_newer_control_center(client) -> None:
-    """Application launch supports both control-center URL families."""
+    """One successful control-center endpoint is enough to launch an app."""
     client._request_bytes = AsyncMock(
         side_effect=[api.EversoloApiClientUnsupportedError(), b""]
     )
@@ -289,8 +295,24 @@ async def test_open_app_falls_back_to_newer_control_center(client) -> None:
     await client.async_open_app("com.qobuz.music")
 
     assert client._request_bytes.await_args_list[1].args[0] == (
-        "/ZidooControlCenter/Apps/openApp"
+        "/ControlCenter/Apps/openApp"
     )
+
+
+@pytest.mark.parametrize(
+    ("package_name", "expected"),
+    [
+        ("com.amazon.mp3", "Amazon Music"),
+        ("com.apple.android.music", "Apple Music"),
+        ("com.qobuz.music", "Qobuz"),
+        ("com.spotify.music", "Spotify"),
+        ("deezer.android.app", "Deezer"),
+        ("org.example.super_radio", "Super Radio"),
+    ],
+)
+def test_friendly_app_labels(client, package_name, expected) -> None:
+    """Known and unknown Android packages receive readable labels."""
+    assert client._friendly_app_label(package_name, package_name) == expected
 
 
 @pytest.mark.asyncio

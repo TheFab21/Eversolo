@@ -16,6 +16,23 @@ from .const import LOGGER
 API_TIMEOUT = aiohttp.ClientTimeout(total=5)
 MAX_CONCURRENT_REQUESTS = 2
 FAVORITES_APP_PACKAGE = "com.eversolo.mycollection.app"
+APP_FRIENDLY_NAMES = {
+    "com.amazon.mp3": "Amazon Music",
+    "com.apple.android.music": "Apple Music",
+    "com.aspiro.tidal": "TIDAL",
+    "com.audials": "Audials Play",
+    "com.bbc.sounds": "BBC Sounds",
+    "com.earthflare.anddroid.radioparadisewidget": "Radio Paradise",
+    "com.eversolo.mycollection.app": "My Favorites",
+    "com.prestomusic.app": "Presto Music",
+    "com.qobuz.music": "Qobuz",
+    "com.rhapsody.napster": "Napster",
+    "com.spotify.music": "Spotify",
+    "com.tunein.player": "TuneIn Radio",
+    "com.yuriy.openradio": "Open Radio",
+    "deezer.android.app": "Deezer",
+    "net.programmierecke.radiodroid2": "RadioDroid 2",
+}
 MUSIC_APP_HINTS = (
     "amazon music",
     "apple music",
@@ -498,9 +515,12 @@ class EversoloApiClient:
                 searchable = f"{label} {package_name}".casefold()
                 is_streaming_result = source_index == 0
                 is_favorites = package_name == FAVORITES_APP_PACKAGE
-                is_music_app = any(hint in searchable for hint in MUSIC_APP_HINTS)
+                is_music_app = package_name.casefold() in APP_FRIENDLY_NAMES or any(
+                    hint in searchable for hint in MUSIC_APP_HINTS
+                )
                 if not (is_streaming_result or is_favorites or is_music_app):
                     continue
+                label = self._friendly_app_label(label, package_name)
                 normalized[package_name] = {
                     **normalized.get(package_name, {}),
                     **app,
@@ -519,18 +539,41 @@ class EversoloApiClient:
             ),
         )
 
+    @staticmethod
+    def _friendly_app_label(label: str, package_name: str) -> str:
+        """Replace raw Android package identifiers with readable app names."""
+        mapped = APP_FRIENDLY_NAMES.get(package_name.casefold())
+        if mapped:
+            return mapped
+        if label.casefold() != package_name.casefold() and "." not in label:
+            return label
+        useful_parts = [
+            part
+            for part in package_name.split(".")
+            if part.casefold()
+            not in {"android", "app", "application", "com", "music", "net"}
+        ]
+        return (
+            (useful_parts[-1] if useful_parts else package_name)
+            .replace("_", " ")
+            .title()
+        )
+
     async def async_open_app(self, package_name: str) -> None:
         """Open an installed application on the Eversolo display."""
         last_error: EversoloApiClientError | None = None
+        opened = False
         for path in (
-            "/ControlCenter/Apps/openApp",
             "/ZidooControlCenter/Apps/openApp",
+            "/ControlCenter/Apps/openApp",
         ):
             try:
                 await self._request_bytes(path, {"packageName": package_name})
-                return
+                opened = True
             except EversoloApiClientError as err:
                 last_error = err
+        if opened:
+            return
         raise last_error or EversoloApiClientResponseError(
             "No application-launch endpoint succeeded"
         )
