@@ -472,6 +472,16 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
             if not package_name:
                 return None, None
             return await self.coordinator.client.async_get_app_icon(package_name)
+        if media_image_id.startswith("path:"):
+            icon_path = media_image_id.removeprefix("path:")
+            if not icon_path:
+                return None, None
+            icon_url = (
+                icon_path
+                if icon_path.startswith(("http://", "https://"))
+                else self.coordinator.client.create_image_url_by_path(icon_path)
+            )
+            return await self.coordinator.client.async_get_image(icon_url)
         if not media_image_id.isdigit():
             return None, None
         return await self.coordinator.client.async_get_image(
@@ -516,6 +526,21 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
             media_id = self._encode_media_id(
                 {"kind": "app", "package_name": package_name}
             )
+            icon_path = next(
+                (
+                    str(app[key])
+                    for key in (
+                        "icon",
+                        "iconUrl",
+                        "iconPath",
+                        "appIcon",
+                        "logo",
+                        "image",
+                    )
+                    if app.get(key)
+                ),
+                None,
+            )
             children.append(
                 BrowseMedia(
                     media_class=MediaClass.APP,
@@ -525,7 +550,9 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
                     can_play=True,
                     can_expand=False,
                     thumbnail=self.get_browse_image_url(
-                        "eversolo_app", media_id, f"app:{package_name}"
+                        "eversolo_app",
+                        media_id,
+                        f"path:{icon_path}" if icon_path else f"app:{package_name}",
                     ),
                 )
             )
