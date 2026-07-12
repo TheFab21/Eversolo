@@ -160,6 +160,7 @@ async def test_settings_refresh_tolerates_optional_endpoints(client) -> None:
     client.async_get_power_options = AsyncMock(
         return_value={"data": [{"tag": "screen", "name": "Screen off"}]}
     )
+    client.async_get_streaming_apps = AsyncMock(return_value=[])
     client.async_has_knob_color = AsyncMock(return_value=False)
 
     result = await client.async_get_settings_data({"knob_brightness": 33})

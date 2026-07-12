@@ -66,6 +66,7 @@
     "select": {
       "knob_color": { "name": "Knob color" },
       "output_mode": { "name": "Audio output" },
+      "streaming_app": { "name": "Music application" },
       "spectrum_style": { "name": "Spectrum style" },
       "vu_style": { "name": "VU meter style" }
     }

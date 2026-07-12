@@ -10,6 +10,7 @@ from homeassistant.components.select import SelectEntity, SelectEntityDescriptio
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import EversoloDataUpdateCoordinator
@@ -88,6 +89,8 @@ async def async_setup_entry(
     async_add_entities(
         EversoloSelect(coordinator, description) for description in descriptions
     )
+    if coordinator.data.get("streaming_apps"):
+        async_add_entities([EversoloStreamingAppSelect(coordinator)])
 
 
 class EversoloSelect(EversoloEntity, SelectEntity):
@@ -162,3 +165,46 @@ class EversoloSelect(EversoloEntity, SelectEntity):
             )
             await self.coordinator.async_refresh_settings()
             return
+
+
+class EversoloStreamingAppSelect(EversoloEntity, SelectEntity):
+    """Launch an installed music application from a native HA control."""
+
+    _attr_translation_key = "streaming_app"
+    _attr_icon = "mdi:apps"
+
+    def __init__(self, coordinator: EversoloDataUpdateCoordinator) -> None:
+        """Initialize the application launcher."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_streaming_app"
+        self._attr_current_option = None
+
+    @property
+    def _apps(self) -> list[dict[str, Any]]:
+        """Return discovered launchable applications."""
+        return [
+            app
+            for app in self.coordinator.data.get("streaming_apps") or []
+            if isinstance(app, dict) and app.get("packageName") and app.get("label")
+        ]
+
+    @property
+    def available(self) -> bool:
+        """Return whether applications were discovered."""
+        return super().available and bool(self._apps)
+
+    @property
+    def options(self) -> list[str]:
+        """Return friendly application names."""
+        return [str(app["label"]) for app in self._apps]
+
+    async def async_select_option(self, option: str) -> None:
+        """Launch the selected application."""
+        for app in self._apps:
+            if app["label"] != option:
+                continue
+            await self.coordinator.client.async_open_app(str(app["packageName"]))
+            self._attr_current_option = option
+            self.async_write_ha_state()
+            return
+        raise HomeAssistantError(f"Eversolo application {option!r} is unavailable")

@@ -66,6 +66,7 @@
     "select": {
       "knob_color": { "name": "Couleur de la molette" },
       "output_mode": { "name": "Sortie audio" },
+      "streaming_app": { "name": "Application musicale" },
       "spectrum_style": { "name": "Style du spectre" },
       "vu_style": { "name": "Style du vu-mètre" }
     }

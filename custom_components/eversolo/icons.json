@@ -18,6 +18,7 @@
     "select": {
       "knob_color": { "default": "mdi:palette" },
       "output_mode": { "default": "mdi:audio-input-stereo-minijack" },
+      "streaming_app": { "default": "mdi:apps" },
       "spectrum_style": { "default": "mdi:chart-histogram" },
       "vu_style": { "default": "mdi:gauge-low" }
     }

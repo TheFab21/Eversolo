@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from html import escape
 import json
 from typing import Any
 
@@ -47,6 +48,24 @@ BASE_FEATURES = (
     | MediaPlayerEntityFeature.SEARCH_MEDIA
     | MediaPlayerEntityFeature.PLAY_MEDIA
 )
+
+APP_ICON_STYLES = {
+    "com.amazon.mp3": ("#00A8E1", "AM"),
+    "com.apple.android.music": ("#FA243C", "♫"),
+    "com.aspiro.tidal": ("#111111", "T"),
+    "com.audials": ("#F26A21", "A"),
+    "com.bbc.sounds": ("#F54997", "BBC"),
+    "com.earthflare.anddroid.radioparadisewidget": ("#111111", "RP"),
+    "com.eversolo.mycollection.app": ("#E33F50", "♥"),
+    "com.prestomusic.app": ("#6F3FA0", "P"),
+    "com.qobuz.music": ("#0070EF", "Q"),
+    "com.rhapsody.napster": ("#2856FF", "N"),
+    "com.spotify.music": ("#1DB954", "S"),
+    "com.tunein.player": ("#14D8CC", "TI"),
+    "com.yuriy.openradio": ("#617187", "OR"),
+    "deezer.android.app": ("#A238FF", "D"),
+    "net.programmierecke.radiodroid2": ("#EA4335", "R"),
+}
 
 
 async def async_setup_entry(
@@ -467,6 +486,29 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
         del media_content_type, media_content_id
         if media_image_id is None:
             return None, None
+        if media_image_id.startswith("{"):
+            image_request = self._decode_media_id(media_image_id)
+            if image_request.get("kind") == "app_icon":
+                package_name = str(image_request.get("package_name") or "")
+                title = str(image_request.get("title") or package_name or "App")
+                if package_name in APP_ICON_STYLES:
+                    return self._generated_app_icon(package_name, title)
+                icon_path = str(image_request.get("path") or "")
+                if icon_path.startswith("/"):
+                    try:
+                        return await self.coordinator.client.async_get_image(
+                            self.coordinator.client.create_image_url_by_path(icon_path)
+                        )
+                    except EversoloApiClientError:
+                        pass
+                if package_name:
+                    try:
+                        return await self.coordinator.client.async_get_app_icon(
+                            package_name
+                        )
+                    except EversoloApiClientError:
+                        pass
+                return self._generated_app_icon(package_name, title)
         if media_image_id.startswith("app:"):
             package_name = media_image_id.removeprefix("app:")
             if not package_name:
@@ -543,16 +585,23 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
             )
             children.append(
                 BrowseMedia(
-                    media_class=MediaClass.APP,
+                    media_class=MediaClass.MUSIC,
                     media_content_id=media_id,
-                    media_content_type="eversolo_app",
+                    media_content_type=MediaType.MUSIC,
                     title=str(app.get("label") or package_name),
                     can_play=True,
                     can_expand=False,
                     thumbnail=self.get_browse_image_url(
-                        "eversolo_app",
+                        MediaType.MUSIC,
                         media_id,
-                        f"path:{icon_path}" if icon_path else f"app:{package_name}",
+                        self._encode_media_id(
+                            {
+                                "kind": "app_icon",
+                                "package_name": package_name,
+                                "title": str(app.get("label") or package_name),
+                                "path": icon_path,
+                            }
+                        ),
                     ),
                 )
             )
@@ -565,6 +614,21 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
             can_expand=True,
             children=children,
         )
+
+    @staticmethod
+    def _generated_app_icon(package_name: str, title: str) -> tuple[bytes, str]:
+        """Create a clean deterministic fallback icon without external requests."""
+        color, glyph = APP_ICON_STYLES.get(
+            package_name,
+            ("#34495E", "".join(word[:1] for word in title.split()[:2]).upper() or "♪"),
+        )
+        font_size = 92 if len(glyph) <= 2 else 64
+        svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<rect width="256" height="256" rx="48" fill="{color}"/>
+<circle cx="128" cy="128" r="84" fill="#ffffff" fill-opacity="0.12"/>
+<text x="128" y="151" text-anchor="middle" font-family="Arial, sans-serif" font-size="{font_size}" font-weight="700" fill="#ffffff">{escape(glyph)}</text>
+</svg>"""
+        return svg.encode(), "image/svg+xml"
 
     def _playlists_browser(self, playlists: list[dict[str, Any]]) -> BrowseMedia:
         """Return a playlist directory."""
