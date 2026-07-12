@@ -121,6 +121,7 @@ class EversoloApiClient:
             "vu_mode_state": self.async_get_vu_mode_state,
             "spectrum_mode_state": self.async_get_spectrum_state,
             "power_options": self.async_get_power_options,
+            "streaming_apps": self.async_get_streaming_apps,
         }
 
         results = await asyncio.gather(
