@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2b1
+
+- Let `media_player.select_source` select device favorites, local playlists, and installed music apps, not only hardware inputs.
+- Match requested source names ignoring case and surrounding spaces, and list the available sources when one is unknown.
+- Request library endpoints under both `/ZidooMusicControl/v2` and `/MusicControl/v2`, remembering the prefix the firmware answers on.
+- Read a missing endpoint (HTTP 404/405/501) as unsupported instead of as an unreachable device.
+- Report the active input from the device-provided index instead of its position in the list.
+- Keep the last known state through a few missed polls instead of logging an error for every timeout.
+- Added `scripts/probe_eversolo_api.py` to report which API endpoints a firmware serves, and listed inputs, favorites, playlists, and apps in diagnostics.
+
 ## 1.0.1b1
 
 - Keep generating `eversolo.zip` as a GitHub release asset.

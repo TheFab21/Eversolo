@@ -36,6 +36,7 @@ from .const import (
     DOMAIN,
     LOGGER,
     SETTINGS_UPDATE_INTERVAL,
+    TOLERATED_FAILED_POLLS,
     WOL_PORTS,
 )
 
@@ -56,6 +57,7 @@ class EversoloDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.device_info: dict[str, Any] = self._device_info_from_entry(config_entry)
         self._settings_data: dict[str, Any] = {}
         self._settings_refresh_at = 0.0
+        self._failed_polls = 0
         self.last_realtime_update = None
         super().__init__(
             hass=hass,
@@ -156,10 +158,19 @@ class EversoloDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except EversoloApiClientAuthenticationError as err:
             raise ConfigEntryAuthFailed from err
         except EversoloApiClientCommunicationError as err:
+            self._failed_polls += 1
+            if self.data and self._failed_polls <= TOLERATED_FAILED_POLLS:
+                LOGGER.debug(
+                    "Keeping the last Eversolo state after %s failed poll(s): %s",
+                    self._failed_polls,
+                    err,
+                )
+                return self.data
             raise UpdateFailed(str(err)) from err
         except EversoloApiClientError as err:
             raise UpdateFailed(f"Invalid Eversolo response: {err}") from err
 
+        self._failed_polls = 0
         now = time.monotonic()
         if now >= self._settings_refresh_at:
             self._settings_data = await self.client.async_get_settings_data(
@@ -205,4 +216,5 @@ class EversoloDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "last_update_success": self.last_update_success,
             "device_info": self.device_info,
             "available_data": sorted(self.data),
+            "library_prefix": self.client.library_prefix,
         }

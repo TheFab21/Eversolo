@@ -11,6 +11,9 @@ ATTRIBUTION = ""
 DEFAULT_PORT = 9529
 DEFAULT_UPDATE_INTERVAL = 2
 SETTINGS_UPDATE_INTERVAL = 30
+# A streamer busy decoding can miss a two-second poll; keep the last state for
+# a few of them instead of flapping the entities and logging an error.
+TOLERATED_FAILED_POLLS = 3
 
 DEFAULT_POWER_BEHAVIOR = "poweroff"
 POWER_BEHAVIOR_STANDBY = "standby"

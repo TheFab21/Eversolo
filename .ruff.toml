@@ -40,6 +40,10 @@ lint.ignore = [
     "UP046", # Generic type not annotated with a specific type
 ]
 
+[lint.per-file-ignores]
+# Command-line helpers report their progress on stdout.
+"scripts/*.py" = ["T201"]
+
 [lint.flake8-pytest-style]
 fixture-parentheses = false
 

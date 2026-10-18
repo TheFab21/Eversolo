@@ -161,13 +161,19 @@ async def test_settings_refresh_tolerates_optional_endpoints(client) -> None:
         return_value={"data": [{"tag": "screen", "name": "Screen off"}]}
     )
     client.async_get_streaming_apps = AsyncMock(return_value=[])
+    client.async_get_source_favorites = AsyncMock(return_value=[{"title": "Radio"}])
+    client.async_get_song_lists = AsyncMock(
+        side_effect=api.EversoloApiClientUnsupportedError()
+    )
     client.async_has_knob_color = AsyncMock(return_value=False)
 
     result = await client.async_get_settings_data({"knob_brightness": 33})
 
     assert result["display_brightness"] == 120
     assert result["is_display_on"] is True
+    assert result["favorites"] == [{"title": "Radio"}]
     assert "knob_brightness" not in result
+    assert "song_lists" not in result
 
 
 @pytest.mark.asyncio
@@ -367,3 +373,100 @@ async def test_brightness_conversion_and_clamping(client) -> None:
     await client.async_set_knob_brightness(-1)
     assert client._request_bytes.await_args_list[0].args[1] == {"index": 115}
     assert client._request_bytes.await_args_list[1].args[1] == {"index": 0}
+
+
+@pytest.mark.asyncio
+async def test_library_prefix_falls_back_and_is_remembered(client) -> None:
+    """Firmware serving the library under /MusicControl/v2 must still work."""
+    client._request_json_value = AsyncMock(
+        side_effect=[
+            api.EversoloApiClientUnsupportedError(),
+            {"array": [{"id": 1}]},
+            {"array": [{"id": 2}]},
+        ]
+    )
+
+    assert await client.async_get_favorites() == [{"id": 1}]
+    assert client.library_prefix == "/MusicControl/v2"
+
+    assert await client.async_get_play_queue() == [{"id": 2}]
+    assert client._request_json_value.await_args_list[-1].args[0] == (
+        "/MusicControl/v2/getPlayQueue"
+    )
+
+
+@pytest.mark.asyncio
+async def test_library_prefix_reports_unsupported_when_none_answers(client) -> None:
+    """A library the firmware does not expose must not look like an outage."""
+    client._request_json_value = AsyncMock(
+        side_effect=api.EversoloApiClientUnsupportedError()
+    )
+
+    with pytest.raises(api.EversoloApiClientUnsupportedError):
+        await client.async_get_favorites()
+    assert client.library_prefix is None
+
+
+@pytest.mark.asyncio
+async def test_missing_endpoint_is_unsupported_not_a_communication_error() -> None:
+    """HTTP 404 means this firmware lacks the endpoint, not that it is offline."""
+
+    class _Response:
+        status = 404
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc_info):
+            return False
+
+    class _Session:
+        def get(self, _url, **_kwargs):
+            return _Response()
+
+    client = api.EversoloApiClient("192.168.1.50", 9529, _Session())
+
+    with pytest.raises(api.EversoloApiClientUnsupportedError):
+        await client.async_get_favorites()
+
+
+def test_selectable_sources_merge_inputs_favorites_playlists_and_apps(client) -> None:
+    """Favorites are selectable by name, and an input keeps a repeated name."""
+    sources = client.transform_selectable_sources(
+        {"transformed_sources": [{"title": "Internal", "tag": "XMOS", "index": 4}]},
+        [{"title": "Radio Paradise"}, {"songName": "Internal"}, {"artist": "no name"}],
+        [{"name": "Jazz", "id": 3}],
+        [{"label": "Qobuz", "packageName": "com.qobuz.music"}, {"label": "No package"}],
+    )
+
+    assert [(source["kind"], source["name"]) for source in sources] == [
+        ("input", "Internal"),
+        ("favorite", "Radio Paradise"),
+        ("playlist", "Jazz"),
+        ("app", "Qobuz"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("requested", "expected"),
+    [
+        ("Radio Paradise", "favorite"),
+        ("  radio paradise ", "favorite"),
+        ("Internal", "input"),
+        ("xmos", "input"),
+        ("Unknown station", None),
+    ],
+)
+def test_match_source_is_tolerant_then_falls_back_to_tags(
+    client, requested, expected
+) -> None:
+    """Dashboards send names with stray case and spacing."""
+    sources = client.transform_selectable_sources(
+        {"transformed_sources": [{"title": "Internal", "tag": "XMOS", "index": 4}]},
+        [{"title": "Radio Paradise"}],
+        [],
+        [],
+    )
+
+    matched = client.match_source(sources, requested)
+    assert (matched["kind"] if matched else None) == expected

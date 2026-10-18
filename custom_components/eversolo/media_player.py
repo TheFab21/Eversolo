@@ -160,23 +160,31 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
 
     @property
     def source(self) -> str | None:
-        """Return the active input name using the device index."""
+        """Return the active input name using the device-provided index."""
         io_state = self.coordinator.data.get("input_output_state") or {}
-        sources = io_state.get("inputData") or []
         index = io_state.get("inputIndex")
-        if isinstance(index, int) and 0 <= index < len(sources):
-            source = sources[index]
-            if isinstance(source, Mapping):
-                return str(source.get("name") or source.get("tag"))
+        if not isinstance(index, int):
+            return None
+        for item in io_state.get("transformed_sources") or []:
+            if int(item["index"]) == index:
+                return str(item["title"])
         return None
 
     @property
     def source_list(self) -> list[str] | None:
-        """Return available input names."""
-        sources = (self.coordinator.data.get("input_output_state") or {}).get(
-            "transformed_sources"
-        ) or []
-        return [str(source["title"]) for source in sources] or None
+        """Return inputs, favorites, playlists, and music apps as one list."""
+        return [source["name"] for source in self._selectable_sources] or None
+
+    @property
+    def _selectable_sources(self) -> list[dict[str, Any]]:
+        """Return everything Home Assistant can switch to by name."""
+        data = self.coordinator.data
+        return self.coordinator.client.transform_selectable_sources(
+            data.get("input_output_state") or {},
+            data.get("favorites") or [],
+            data.get("song_lists") or [],
+            data.get("streaming_apps") or [],
+        )
 
     @property
     def media_title(self) -> str | None:
@@ -313,28 +321,51 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
         await self.coordinator.async_request_refresh()
 
     async def async_select_source(self, source: str) -> None:
-        """Select an input by its device-provided tag and index."""
-        sources = (self.coordinator.data.get("input_output_state") or {}).get(
-            "transformed_sources"
-        ) or []
-        selected = next(
-            (
-                item
-                for item in sources
-                if source in (str(item.get("title")), str(item.get("tag")))
-            ),
-            None,
+        """Select an input, a device favorite, a playlist, or a music app."""
+        selected = self.coordinator.client.match_source(
+            self._selectable_sources, source
         )
         if selected is None:
             raise HomeAssistantError(
                 translation_domain="eversolo",
                 translation_key="source_not_found",
-                translation_placeholders={"source": source},
+                translation_placeholders={
+                    "source": source,
+                    "sources": ", ".join(self.source_list or []) or "none",
+                },
             )
-        await self.coordinator.client.async_set_input(
-            int(selected["index"]), str(selected["tag"])
+        item = selected["item"]
+        try:
+            if selected["kind"] == "input":
+                await self.coordinator.client.async_set_input(
+                    int(item["index"]), str(item["tag"])
+                )
+                await self.coordinator.async_refresh_settings()
+                return
+            if selected["kind"] == "app":
+                await self.coordinator.client.async_open_app(str(item["packageName"]))
+            elif selected["kind"] == "playlist":
+                await self._async_play_playlist(item.get("id", item.get("songListId")))
+            else:
+                await self.coordinator.client.async_play_library_item(item)
+        except (EversoloApiClientError, KeyError, TypeError, ValueError) as err:
+            raise HomeAssistantError(
+                translation_domain="eversolo",
+                translation_key="source_select_failed",
+                translation_placeholders={"source": source, "error": str(err)},
+            ) from err
+        await self.coordinator.async_request_refresh()
+
+    async def _async_play_playlist(self, playlist_id: str | int | None) -> None:
+        """Start a local playlist from its first track."""
+        if playlist_id is None:
+            raise HomeAssistantError("The Eversolo playlist has no identifier")
+        tracks = await self.coordinator.client.async_get_song_list_musics(playlist_id)
+        if not tracks:
+            raise HomeAssistantError("The selected Eversolo playlist is empty")
+        await self.coordinator.client.async_play_library_item(
+            tracks[0], context_id=playlist_id, track_index=0
         )
-        await self.coordinator.async_refresh_settings()
 
     async def async_media_play_pause(self) -> None:
         """Toggle play/pause."""
@@ -458,14 +489,7 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
                     int(request["index"])
                 )
             elif request.get("kind") == "playlist":
-                tracks = await self.coordinator.client.async_get_song_list_musics(
-                    request["id"]
-                )
-                if not tracks:
-                    raise HomeAssistantError("The selected Eversolo playlist is empty")
-                await self.coordinator.client.async_play_library_item(
-                    tracks[0], context_id=request["id"], track_index=0
-                )
+                await self._async_play_playlist(request["id"])
             else:
                 await self.coordinator.client.async_play_library_item(
                     request["item"],

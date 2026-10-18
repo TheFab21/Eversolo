@@ -11,6 +11,7 @@ This fork modernizes the original [hchris1/Eversolo](https://github.com/hchris1/
 ## Highlights
 
 - One rich media player for playback, volume, mute, seeking, source selection, repeat, shuffle, and power
+- `media_player.select_source` switches to hardware inputs, device favorites, local playlists, and installed music apps by name
 - Album artwork proxied through Home Assistant
 - Audiophile metadata: format, sample rate, bit depth, bitrate, channels, output codec, DSP, EQ, and MQA state
 - Browse and play the current queue, favorites, and local playlists
@@ -38,7 +39,7 @@ Community API evidence covers:
 - Eversolo Play
 - Newer transports and DACs that expose the same Zidoo/Eversolo API family
 
-Hardware and firmware vary. The playback and I/O endpoints are documented by Zidoo; display controls, favorites, playlists, and search are experimental across models. Please include model, firmware, and diagnostics in bug reports.
+Hardware and firmware vary. The playback and I/O endpoints are documented by Zidoo; display controls, favorites, playlists, and search are experimental across models. Library endpoints are requested under both `/ZidooMusicControl/v2` and `/MusicControl/v2`, because firmware generations differ, and the prefix that answers is remembered. Please include model, firmware, and diagnostics in bug reports.
 
 ## Requirements
 
@@ -70,13 +71,25 @@ The media player is the primary control surface. It provides:
 
 - play, pause, next, previous, seek
 - volume, step volume, mute and unmute
-- dynamic input selection
+- dynamic input selection, extended with favorites, playlists, and music apps
 - repeat one, repeat all, and shuffle
 - power off, configurable standby, and Wake-on-LAN
 - artwork and detailed audio attributes
 - queue, favorites, playlists, and search in the Home Assistant media browser
 
 The legacy command buttons keep their existing unique IDs for automation compatibility. Redundant power and screen buttons are disabled by default on new installations; they can be enabled from the entity registry.
+
+## Selecting favorites
+
+Hardware inputs, the device favorites, local playlists, and installed music apps share one source list, the way the Sonos and HEOS integrations expose their favorites. A dashboard or script can therefore start a favorite by name:
+
+    action: media_player.select_source
+    target:
+      entity_id: media_player.eversolo
+    data:
+      source: Radio Paradise
+
+Names are matched ignoring case and surrounding spaces, and an input can also be selected by its device tag. When a name is unknown, the error lists the sources the device currently offers. Favorites that the firmware does not expose over HTTP cannot be selected; the probe below reports what a given device serves.
 
 ## Options and reconfiguration
 
@@ -98,6 +111,14 @@ Useful report details:
 - playback source that was active
 - whether the issue concerns playback, I/O, display controls, or library browsing
 - a short reproduction sequence
+
+## Probing the device API
+
+Eversolo does not publish its control API, so a firmware may serve endpoints this integration does not use yet. The bundled probe reports which ones answer:
+
+    python3 scripts/probe_eversolo_api.py 192.168.1.50 --output eversolo-api.json
+
+Start an internet-radio favorite on the device first: the playback state then shows the identifiers the firmware reports for a station. Only read-only endpoints are requested, and file-browser endpoints are skipped because they can echo stored share credentials. Review the report before attaching it to an issue.
 
 ## Development
 
