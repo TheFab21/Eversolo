@@ -165,6 +165,7 @@ async def test_settings_refresh_tolerates_optional_endpoints(client) -> None:
     client.async_get_song_lists = AsyncMock(
         side_effect=api.EversoloApiClientUnsupportedError()
     )
+    client.async_get_play_queue = AsyncMock(return_value=[{"title": "FIP"}])
     client.async_has_knob_color = AsyncMock(return_value=False)
 
     result = await client.async_get_settings_data({"knob_brightness": 33})
@@ -172,6 +173,7 @@ async def test_settings_refresh_tolerates_optional_endpoints(client) -> None:
     assert result["display_brightness"] == 120
     assert result["is_display_on"] is True
     assert result["favorites"] == [{"title": "Radio"}]
+    assert result["play_queue"] == [{"title": "FIP"}]
     assert "knob_brightness" not in result
     assert "song_lists" not in result
 
@@ -498,3 +500,38 @@ async def test_streaming_app_label_comes_from_the_title_key(client) -> None:
     assert [(app["label"], app["packageName"]) for app in apps] == [
         ("TuneIn Radio", "tunein.player")
     ]
+
+
+def test_play_queue_entries_are_selectable_by_name(client) -> None:
+    """On the internet-radio source the queue is where the stations live."""
+    queue = [
+        {
+            "title": "RTS Option Musique",
+            "url": "http://stream.srg-ssr.ch/option-musique/mp3_128.m3u",
+            "sourceType": 19,
+        },
+        {
+            "title": "Radio Paradise Main Mix (EU) 320k AAC",
+            "url": "http://stream-uk1.radioparadise.com/aac-320",
+            "sourceType": 19,
+        },
+    ]
+    sources = client.transform_selectable_sources(
+        {
+            "transformed_sources": [
+                {"title": "Lecteur interne", "tag": "XMOS", "index": 0}
+            ]
+        },
+        [],
+        [],
+        [],
+        queue,
+    )
+
+    assert [(source["kind"], source["name"]) for source in sources] == [
+        ("input", "Lecteur interne"),
+        ("queue", "RTS Option Musique"),
+        ("queue", "Radio Paradise Main Mix (EU) 320k AAC"),
+    ]
+    station = client.match_source(sources, "radio paradise main mix (eu) 320k aac")
+    assert station["index"] == 1

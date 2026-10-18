@@ -81,13 +81,15 @@ The legacy command buttons keep their existing unique IDs for automation compati
 
 ## Selecting favorites
 
-Hardware inputs, the device favorites, local playlists, and installed music apps share one source list, the way the Sonos and HEOS integrations expose their favorites. A dashboard or script can therefore start a favorite by name:
+Hardware inputs, the play queue, the device favorites, local playlists, and installed music apps share one source list, the way the Sonos and HEOS integrations expose their favorites. A dashboard or script can therefore start a favorite by name:
 
     action: media_player.select_source
     target:
       entity_id: media_player.eversolo
     data:
       source: Radio Paradise
+
+On the internet-radio source the queue is where the stations live — the firmware exposes no favorites endpoint for them — so a station is selected by the title the device gives it.
 
 Names are matched ignoring case and surrounding spaces, and an input can also be selected by its device tag. When a name is unknown, the error lists the sources the device currently offers. Favorites that the firmware does not expose over HTTP cannot be selected; the probe below reports what a given device serves.
 

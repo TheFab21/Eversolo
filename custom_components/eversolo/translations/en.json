@@ -77,6 +77,9 @@
     },
     "source_select_failed": {
       "message": "Could not select {source} on this Eversolo: {error}"
+    },
+    "media_id_not_supported": {
+      "message": "This Eversolo plays items from its own library, queue and apps, not the media identifier {media_id}. Pick an item from the media browser, or select it by name with media_player.select_source."
     }
   }
 }

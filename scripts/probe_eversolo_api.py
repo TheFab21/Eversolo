@@ -123,6 +123,35 @@ def sample(decoded: Any) -> Any:
     }
 
 
+def collect_play_queue(base: str, timeout: float) -> list[dict[str, Any]]:
+    """Return every queue entry, untruncated.
+
+    On the internet-radio source the queue is where the stations live, each
+    with the title `media_player.select_source` matches and its stream URL, so
+    the report keeps all of them rather than a sample.
+    """
+    for prefix in LIBRARY_PREFIXES:
+        result = request(
+            f"{base}{prefix}/getPlayQueue?start=0&count=200&sort=0", timeout
+        )
+        if result.get("http_status") != 200:
+            continue
+        entries = result.get("sample", {})
+        array = entries.get("array") if isinstance(entries, dict) else None
+        if not isinstance(array, list):
+            continue
+        return [
+            {
+                "title": entry.get("title") or entry.get("fileName"),
+                "url": entry.get("url") or entry.get("uri"),
+                "sourceType": entry.get("sourceType"),
+            }
+            for entry in array
+            if isinstance(entry, dict)
+        ]
+    return []
+
+
 def probe(host: str, port: int, timeout: float) -> dict[str, Any]:
     """Probe every endpoint and group the results by category."""
     base = f"http://{host}:{port}"
@@ -142,11 +171,19 @@ def probe(host: str, port: int, timeout: float) -> dict[str, Any]:
         report["library"][endpoint] = {
             prefix: run(f"{prefix}/{endpoint}", params) for prefix in LIBRARY_PREFIXES
         }
+
+    print("Play queue (full):")
+    report["play_queue"] = collect_play_queue(base, timeout)
     return report
 
 
 def summarize(report: dict[str, Any]) -> None:
     """Print the endpoints that answered, which is what the integration needs."""
+    queue = report.get("play_queue") or []
+    if queue:
+        print("\nPlay queue — these titles are selectable with select_source:")
+        for index, entry in enumerate(queue):
+            print(f"  [{index}] {entry['title']}  ->  {entry['url']}")
     print("\nEndpoints that answered with data:")
     for path, result in report["known"].items():
         if result.get("http_status") == 200:
