@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from typing import Any
 from urllib.error import HTTPError
 from urllib.parse import urlencode
@@ -162,6 +163,9 @@ def summarize(report: dict[str, Any]) -> None:
 
 def main() -> None:
     """Run the probe from the command line."""
+    # Station names are not ASCII, and a redirected console on Windows is.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("host", help="Eversolo IP address or hostname")
     parser.add_argument("--port", type=int, default=9529, help="API port (9529)")
