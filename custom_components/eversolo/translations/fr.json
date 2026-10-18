@@ -73,7 +73,10 @@
   },
   "exceptions": {
     "source_not_found": {
-      "message": "La source {source} n’est plus disponible sur cet appareil."
+      "message": "La source {source} n’est pas disponible sur cet Eversolo. Sources disponibles : {sources}."
+    },
+    "source_select_failed": {
+      "message": "Impossible de sélectionner {source} sur cet Eversolo : {error}"
     }
   }
 }

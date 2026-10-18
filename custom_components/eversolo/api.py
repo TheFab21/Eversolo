@@ -16,6 +16,10 @@ from .const import LOGGER
 API_TIMEOUT = aiohttp.ClientTimeout(total=5)
 MAX_CONCURRENT_REQUESTS = 2
 FAVORITES_APP_PACKAGE = "com.eversolo.mycollection.app"
+# Firmware generations serve the music-library endpoints under either prefix.
+LIBRARY_PREFIXES = ("/ZidooMusicControl/v2", "/MusicControl/v2")
+FAVORITES_COUNT = 200
+SOURCE_FAVORITES_COUNT = 100
 APP_FRIENDLY_NAMES = {
     "com.amazon.mp3": "Amazon Music",
     "com.apple.android.music": "Apple Music",
@@ -88,6 +92,7 @@ class EversoloApiClient:
         self._port = port
         self._session = session
         self._request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        self._library_prefix: str | None = None
 
     @property
     def host(self) -> str:
@@ -98,6 +103,11 @@ class EversoloApiClient:
     def port(self) -> int:
         """Return the configured port."""
         return self._port
+
+    @property
+    def library_prefix(self) -> str | None:
+        """Return the music-library prefix this firmware answered on."""
+        return self._library_prefix
 
     def _url(self, path: str) -> URL:
         """Build a safe local API URL, including IPv6 hosts."""
@@ -122,6 +132,8 @@ class EversoloApiClient:
             "spectrum_mode_state": self.async_get_spectrum_state,
             "power_options": self.async_get_power_options,
             "streaming_apps": self.async_get_streaming_apps,
+            "favorites": self.async_get_source_favorites,
+            "song_lists": self.async_get_song_lists,
         }
 
         results = await asyncio.gather(
@@ -190,6 +202,76 @@ class EversoloApiClient:
             and output.get("tag")
             and bool(output.get("enable", True))
         ]
+
+    @staticmethod
+    def transform_selectable_sources(
+        input_output_state: Mapping[str, Any],
+        favorites: list[dict[str, Any]],
+        song_lists: list[dict[str, Any]],
+        streaming_apps: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Return everything the media player can switch to by name.
+
+        Dashboards and scripts address Eversolo favorites through
+        `media_player.select_source`, the way the Sonos and HEOS integrations
+        let you select their favorites, so hardware inputs, device favorites,
+        local playlists, and installed music apps share one list. An input
+        keeps the name when a favorite repeats it.
+        """
+        sources: list[dict[str, Any]] = [
+            {"kind": "input", "name": str(item["title"]), "item": item}
+            for item in input_output_state.get("transformed_sources") or []
+        ]
+        sources.extend(
+            {"kind": "favorite", "name": name, "item": favorite}
+            for favorite in favorites
+            if (name := EversoloApiClient.library_item_name(favorite))
+        )
+        sources.extend(
+            {"kind": "playlist", "name": name, "item": playlist}
+            for playlist in song_lists
+            if (name := EversoloApiClient.library_item_name(playlist))
+        )
+        sources.extend(
+            {"kind": "app", "name": str(app["label"]), "item": app}
+            for app in streaming_apps
+            if app.get("label") and app.get("packageName")
+        )
+        unique: dict[str, dict[str, Any]] = {}
+        for source in sources:
+            unique.setdefault(source["name"].casefold(), source)
+        return list(unique.values())
+
+    @staticmethod
+    def match_source(
+        sources: list[dict[str, Any]], requested: str
+    ) -> dict[str, Any] | None:
+        """Match a requested source name tolerantly, then fall back to tags."""
+        wanted = requested.strip().casefold()
+        for source in sources:
+            if source["name"] == requested:
+                return source
+        for source in sources:
+            if source["name"].strip().casefold() == wanted:
+                return source
+        return next(
+            (
+                source
+                for source in sources
+                if source["kind"] == "input"
+                and str(source["item"].get("tag")).casefold() == wanted
+            ),
+            None,
+        )
+
+    @staticmethod
+    def library_item_name(item: Mapping[str, Any]) -> str | None:
+        """Return the plain name a dashboard would use for a library item."""
+        for key in ("title", "name", "songName", "musicName"):
+            value = item.get(key)
+            if value:
+                return str(value)
+        return None
 
     async def async_get_input_output_state(self) -> dict[str, Any]:
         """Return inputs, outputs, and the current selections."""
@@ -444,38 +526,42 @@ class EversoloApiClient:
 
     async def async_get_play_queue(self) -> list[dict[str, Any]]:
         """Return the current play queue."""
-        return await self._request_items("/ZidooMusicControl/v2/getPlayQueue")
+        return await self._request_library_items("getPlayQueue")
 
     async def async_play_queue_item(self, index: int) -> None:
         """Play a queue item by index."""
-        await self._request_bytes(
-            "/ZidooMusicControl/v2/playQueueMusic", {"index": index}
+        await self._request_library_bytes("playQueueMusic", {"index": index})
+
+    async def async_get_favorites(
+        self, count: int = FAVORITES_COUNT
+    ) -> list[dict[str, Any]]:
+        """Return the device favorites exposed by the music library."""
+        return await self._request_library_items(
+            "getFavorites",
+            {"start": 0, "count": count, "sort": 0},
         )
 
-    async def async_get_favorites(self) -> list[dict[str, Any]]:
-        """Return local-library favorite tracks."""
-        return await self._request_items(
-            "/ZidooMusicControl/v2/getFavorites",
-            {"start": 0, "count": 200, "sort": 0},
-        )
+    async def async_get_source_favorites(self) -> list[dict[str, Any]]:
+        """Return the favorites slice that is cheap enough to poll."""
+        return await self.async_get_favorites(SOURCE_FAVORITES_COUNT)
 
     async def async_get_song_lists(self) -> list[dict[str, Any]]:
         """Return local playlists."""
-        return await self._request_items("/ZidooMusicControl/v2/getSongLists")
+        return await self._request_library_items("getSongLists")
 
     async def async_get_song_list_musics(
         self, playlist_id: str | int
     ) -> list[dict[str, Any]]:
         """Return tracks in a local playlist."""
-        return await self._request_items(
-            "/ZidooMusicControl/v2/getSongListMusics",
+        return await self._request_library_items(
+            "getSongListMusics",
             {"id": playlist_id, "start": 0, "count": 500, "sort": 0},
         )
 
     async def async_search_music(self, query: str) -> list[dict[str, Any]]:
         """Search the local music library."""
-        return await self._request_items(
-            "/ZidooMusicControl/v2/searchMusicV2",
+        return await self._request_library_items(
+            "searchMusicV2",
             {"key": query, "start": 0, "count": 100},
         )
 
@@ -591,8 +677,8 @@ class EversoloApiClient:
         if music_id is None:
             raise EversoloApiClientResponseError("Library item has no music identifier")
         item_type = int(item.get("musicType", item.get("type", 1)))
-        await self._request_bytes(
-            "/ZidooMusicControl/v2/playMusic",
+        await self._request_library_bytes(
+            "playMusic",
             {
                 "type": int(item.get("type", item_type)),
                 "id": context_id if context_id is not None else music_id,
@@ -677,6 +763,41 @@ class EversoloApiClient:
         """Return collection items from an object wrapper or a root JSON array."""
         return self._extract_items(await self._request_json_value(path, params))
 
+    async def _request_library_items(
+        self, endpoint: str, params: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Return library items from whichever music prefix this firmware serves."""
+        return self._extract_items(
+            await self._request_library(self._request_json_value, endpoint, params)
+        )
+
+    async def _request_library_bytes(
+        self, endpoint: str, params: Mapping[str, Any] | None = None
+    ) -> bytes:
+        """Run a library command on whichever music prefix this firmware serves."""
+        return await self._request_library(self._request_bytes, endpoint, params)
+
+    async def _request_library[T](
+        self,
+        request: Callable[[str, Mapping[str, Any] | None], Awaitable[T]],
+        endpoint: str,
+        params: Mapping[str, Any] | None,
+    ) -> T:
+        """Call a music-library endpoint, remembering the prefix that answers."""
+        prefixes = (self._library_prefix,) if self._library_prefix else LIBRARY_PREFIXES
+        last_error: EversoloApiClientError | None = None
+        for prefix in prefixes:
+            try:
+                result = await request(f"{prefix}/{endpoint}", params)
+            except EversoloApiClientUnsupportedError as err:
+                last_error = err
+                continue
+            self._library_prefix = prefix
+            return result
+        raise last_error or EversoloApiClientUnsupportedError(
+            f"No music-library endpoint answered for {endpoint}"
+        )
+
     async def _request_json(
         self, path: str, params: Mapping[str, Any] | None = None
     ) -> dict[str, Any]:
@@ -735,6 +856,11 @@ class EversoloApiClient:
                 if response.status in (401, 403):
                     raise EversoloApiClientAuthenticationError(
                         "Device rejected authentication"
+                    )
+                if response.status in (404, 405, 501):
+                    raise EversoloApiClientUnsupportedError(
+                        f"Endpoint {url.path} is unsupported by this firmware "
+                        f"(HTTP {response.status})"
                     )
                 response.raise_for_status()
                 return await response.read(), response.content_type

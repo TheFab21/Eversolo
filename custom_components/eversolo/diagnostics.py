@@ -40,6 +40,25 @@ async def async_get_config_entry_diagnostics(
             "locked": volume.get("isLock"),
         },
     }
+    io_state = coordinator.data.get("input_output_state") or {}
+    library = {
+        "inputs": [
+            {"title": source.get("title"), "tag": source.get("tag")}
+            for source in io_state.get("transformed_sources") or []
+        ],
+        "input_index": io_state.get("inputIndex"),
+        "favorites": [
+            favorite.get("title") or favorite.get("name")
+            for favorite in coordinator.data.get("favorites") or []
+        ],
+        "playlists": [
+            playlist.get("name") or playlist.get("title")
+            for playlist in coordinator.data.get("song_lists") or []
+        ],
+        "apps": [
+            app.get("label") for app in coordinator.data.get("streaming_apps") or []
+        ],
+    }
     return async_redact_data(
         {
             "entry": {
@@ -50,6 +69,7 @@ async def async_get_config_entry_diagnostics(
             },
             "coordinator": coordinator.diagnostics_summary,
             "state": state_summary,
+            "library": library,
         },
         TO_REDACT,
     )
