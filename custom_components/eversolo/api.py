@@ -135,6 +135,7 @@ class EversoloApiClient:
             "streaming_apps": self.async_get_streaming_apps,
             "favorites": self.async_get_source_favorites,
             "song_lists": self.async_get_song_lists,
+            "play_queue": self.async_get_play_queue,
         }
 
         results = await asyncio.gather(
@@ -210,19 +211,29 @@ class EversoloApiClient:
         favorites: list[dict[str, Any]],
         song_lists: list[dict[str, Any]],
         streaming_apps: list[dict[str, Any]],
+        play_queue: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         """Return everything the media player can switch to by name.
 
-        Dashboards and scripts address Eversolo favorites through
+        Dashboards and scripts address Eversolo stations and favorites through
         `media_player.select_source`, the way the Sonos and HEOS integrations
-        let you select their favorites, so hardware inputs, device favorites,
-        local playlists, and installed music apps share one list. An input
-        keeps the name when a favorite repeats it.
+        let you select their favorites, so hardware inputs, the play queue,
+        device favorites, local playlists, and installed music apps share one
+        list. An input keeps the name when another entry repeats it.
+
+        The queue matters most on the internet-radio source: the firmware
+        exposes no favorites endpoint for stations, but it does list them in
+        the queue, each with a title and a stream URL.
         """
         sources: list[dict[str, Any]] = [
             {"kind": "input", "name": str(item["title"]), "item": item}
             for item in input_output_state.get("transformed_sources") or []
         ]
+        sources.extend(
+            {"kind": "queue", "name": name, "index": index, "item": entry}
+            for index, entry in enumerate(play_queue or [])
+            if (name := EversoloApiClient.library_item_name(entry))
+        )
         sources.extend(
             {"kind": "favorite", "name": name, "item": favorite}
             for favorite in favorites

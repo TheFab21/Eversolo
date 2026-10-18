@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3b1
+
+- Expose the play queue as selectable sources: on the internet-radio source the firmware lists the stations there, so `media_player.select_source` can now start one by name.
+- Report a clear error when `media_player.play_media` receives something other than a media-browser identifier, such as a stream URL, instead of raising a JSON decoding error.
+- `scripts/probe_eversolo_api.py` now prints the whole play queue with each entry's title and stream URL.
+
 ## 1.0.2b2
 
 - Read an application's name from the `title` key the streaming list uses, so TuneIn Radio no longer appears as "Player" on DMP-A6 firmware v1.6.15.

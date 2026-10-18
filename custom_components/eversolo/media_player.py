@@ -184,6 +184,7 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
             data.get("favorites") or [],
             data.get("song_lists") or [],
             data.get("streaming_apps") or [],
+            data.get("play_queue") or [],
         )
 
     @property
@@ -342,7 +343,11 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
                 )
                 await self.coordinator.async_refresh_settings()
                 return
-            if selected["kind"] == "app":
+            if selected["kind"] == "queue":
+                await self.coordinator.client.async_play_queue_item(
+                    int(selected["index"])
+                )
+            elif selected["kind"] == "app":
                 await self.coordinator.client.async_open_app(str(item["packageName"]))
             elif selected["kind"] == "playlist":
                 await self._async_play_playlist(item.get("id", item.get("songListId")))
@@ -480,7 +485,14 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
     ) -> None:
         """Play a queue, favorite, search, or playlist item."""
         del media_type, enqueue, announce, kwargs
-        request = self._decode_media_id(media_id)
+        try:
+            request = self._decode_media_id(media_id)
+        except (TypeError, ValueError) as err:
+            raise HomeAssistantError(
+                translation_domain="eversolo",
+                translation_key="media_id_not_supported",
+                translation_placeholders={"media_id": str(media_id)},
+            ) from err
         try:
             if request.get("kind") == "app":
                 await self.coordinator.client.async_open_app(request["package_name"])
