@@ -470,3 +470,31 @@ def test_match_source_is_tolerant_then_falls_back_to_tags(
 
     matched = client.match_source(sources, requested)
     assert (matched["kind"] if matched else None) == expected
+
+
+@pytest.mark.asyncio
+async def test_streaming_app_label_comes_from_the_title_key(client) -> None:
+    """The streaming list names an app under "title", not "label"."""
+    client._request_json_value = AsyncMock(
+        side_effect=[
+            {
+                "data": [
+                    {
+                        "appType": 1,
+                        "code": 271526,
+                        "iconUrl": "http://music.eversolo.com/dmp/icon/app_tuneInradio.png",
+                        "packageName": "tunein.player",
+                        "title": "TuneIn Radio",
+                    }
+                ]
+            },
+            api.EversoloApiClientUnsupportedError(),
+            api.EversoloApiClientUnsupportedError(),
+        ]
+    )
+
+    apps = await client.async_get_streaming_apps()
+
+    assert [(app["label"], app["packageName"]) for app in apps] == [
+        ("TuneIn Radio", "tunein.player")
+    ]
