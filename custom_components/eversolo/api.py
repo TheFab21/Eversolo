@@ -251,8 +251,38 @@ class EversoloApiClient:
         )
         unique: dict[str, dict[str, Any]] = {}
         for source in sources:
-            unique.setdefault(source["name"].casefold(), source)
+            key = source["name"].casefold()
+            if key not in unique:
+                unique[key] = source
+                continue
+            # The internet-radio queue can hold one station twice, at
+            # different bitrates; the first keeps the plain name so existing
+            # dashboards still match, and the others are qualified.
+            distinct = EversoloApiClient._distinct_name(
+                source["name"], source["item"], unique
+            )
+            if distinct:
+                unique[distinct.casefold()] = {**source, "name": distinct}
         return list(unique.values())
+
+    @staticmethod
+    def _distinct_name(
+        name: str, item: Mapping[str, Any], taken: Mapping[str, Any]
+    ) -> str | None:
+        """Qualify a repeated name with its bitrate, else with a counter."""
+        candidates = []
+        bitrate = item.get("bitrate")
+        if isinstance(bitrate, (int, float)) and bitrate > 0:
+            candidates.append(f"{name} ({int(bitrate) // 1000} kbps)")
+        candidates.extend(f"{name} ({position})" for position in range(2, 10))
+        return next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate.casefold() not in taken
+            ),
+            None,
+        )
 
     @staticmethod
     def match_source(
@@ -278,11 +308,29 @@ class EversoloApiClient:
 
     @staticmethod
     def library_item_name(item: Mapping[str, Any]) -> str | None:
-        """Return the plain name a dashboard would use for a library item."""
+        """Return the plain name a dashboard would use for a library item.
+
+        Playlists arrive wrapped, as {"count": 0, "obj": {"name": ...}}, so the
+        wrapper is unwrapped before looking for a name.
+        """
+        nested = item.get("obj")
+        if isinstance(nested, Mapping):
+            item = {**nested, **{k: v for k, v in item.items() if k != "obj"}}
         for key in ("title", "name", "songName", "musicName"):
             value = item.get(key)
             if value:
                 return str(value)
+        return None
+
+    @staticmethod
+    def library_item_id(item: Mapping[str, Any]) -> Any:
+        """Return a library item's identifier, wrapped or not."""
+        nested = item.get("obj") if isinstance(item.get("obj"), Mapping) else {}
+        for source in (item, nested):
+            for key in ("id", "songListId"):
+                value = source.get(key)
+                if value is not None:
+                    return value
         return None
 
     async def async_get_input_output_state(self) -> dict[str, Any]:

@@ -202,11 +202,27 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
         """Return current album."""
         return self._metadata_value("album", "albumName", "audioAlbum")
 
+    @property
+    def _is_streaming_to_device(self) -> bool:
+        """Return whether something is being pushed to the device over DLNA.
+
+        The firmware leaves `playingMusic` on the last queue item while a DLNA
+        stream plays, so its title would name a station that stopped. The live
+        audio block describes what is actually playing.
+        """
+        subtitle = str(self._play_info.get("playTypeSubtitle") or "")
+        return subtitle.casefold() == "dlna" or self._playback.get("playType") == 7
+
     def _metadata_value(
         self, local_key: str, audio_key: str, bt_key: str
     ) -> str | None:
         """Read metadata from firmware-specific structures."""
-        value = self._playing_music.get(local_key) or self._audio_info.get(audio_key)
+        sources = (
+            (self._audio_info.get(audio_key), self._playing_music.get(local_key))
+            if self._is_streaming_to_device
+            else (self._playing_music.get(local_key), self._audio_info.get(audio_key))
+        )
+        value = next((candidate for candidate in sources if candidate), None)
         if not value:
             value = (self._play_info.get("everSoloBtInInfo") or {}).get(bt_key)
         return str(value) if value else None
@@ -214,6 +230,11 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
     @property
     def media_image_url(self) -> str | None:
         """Return a device-local artwork URL for Home Assistant to proxy."""
+        if self._is_streaming_to_device:
+            # Showing the stopped station's logo over a DLNA stream is worse
+            # than showing nothing.
+            album_url = self._audio_info.get("albumUrl")
+            return str(album_url) if album_url else None
         album_url = self._play_info.get("icon") or self._playing_music.get("albumArt")
         if album_url:
             album_url = str(album_url)
@@ -670,10 +691,11 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
         """Return a playlist directory."""
         children = []
         for playlist in playlists:
-            playlist_id = playlist.get("id", playlist.get("songListId"))
+            client = self.coordinator.client
+            playlist_id = client.library_item_id(playlist)
             if playlist_id is None:
                 continue
-            title = str(playlist.get("name") or playlist.get("title") or playlist_id)
+            title = str(client.library_item_name(playlist) or playlist_id)
             children.append(
                 BrowseMedia(
                     media_class=MediaClass.PLAYLIST,

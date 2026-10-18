@@ -444,6 +444,8 @@ def test_selectable_sources_merge_inputs_favorites_playlists_and_apps(client) ->
     assert [(source["kind"], source["name"]) for source in sources] == [
         ("input", "Internal"),
         ("favorite", "Radio Paradise"),
+        # The input keeps the plain name; the repeat stays reachable, qualified.
+        ("favorite", "Internal (2)"),
         ("playlist", "Jazz"),
         ("app", "Qobuz"),
     ]
@@ -535,3 +537,46 @@ def test_play_queue_entries_are_selectable_by_name(client) -> None:
     ]
     station = client.match_source(sources, "radio paradise main mix (eu) 320k aac")
     assert station["index"] == 1
+
+
+def test_repeated_station_stays_reachable_through_its_bitrate(client) -> None:
+    """The internet-radio queue holds one station twice, at two bitrates."""
+    queue = [
+        {
+            "title": "RTS Option Musique",
+            "url": "http://stream.srg-ssr.ch/option-musique/mp3_128.m3u",
+            "bitrate": 128000,
+        },
+        {
+            "title": "RTS Option Musique",
+            "url": "http://icy-zurich.mpbnl.nl/rts-optionmusique",
+            "bitrate": 320000,
+        },
+    ]
+    sources = client.transform_selectable_sources({}, [], [], [], queue)
+
+    assert [(source["name"], source["index"]) for source in sources] == [
+        ("RTS Option Musique", 0),
+        ("RTS Option Musique (320 kbps)", 1),
+    ]
+
+
+def test_wrapped_playlist_keeps_its_name_and_identifier(client) -> None:
+    """This firmware wraps a playlist in an "obj" member."""
+    playlist = {
+        "count": 0,
+        "obj": {
+            "createTime": 1792333967019,
+            "id": 1,
+            "name": "t",
+            "m3uFilePath": "/data/user/0/com.zidoo.streamer/files/m3u_file/t",
+        },
+    }
+
+    assert client.library_item_name(playlist) == "t"
+    assert client.library_item_id(playlist) == 1
+
+    sources = client.transform_selectable_sources({}, [], [playlist], [], [])
+    assert [(source["kind"], source["name"]) for source in sources] == [
+        ("playlist", "t")
+    ]
