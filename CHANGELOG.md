@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4b1
+
+- Name what is actually playing during a DLNA stream: the firmware leaves `playingMusic` on the station that stopped, so the live audio block is read first, and the stopped station's artwork is no longer shown.
+- Keep a station reachable when the internet-radio queue holds it twice: the first keeps its plain name and the repeat is qualified with its bitrate.
+- Read playlists wrapped in an `obj` member, which this firmware uses, so they appear in the source list and the media browser instead of being skipped.
+
 ## 1.0.3b1
 
 - Expose the play queue as selectable sources: on the internet-radio source the firmware lists the stations there, so `media_player.select_source` can now start one by name.
