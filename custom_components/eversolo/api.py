@@ -33,6 +33,7 @@ APP_FRIENDLY_NAMES = {
     "com.rhapsody.napster": "Napster",
     "com.spotify.music": "Spotify",
     "com.tunein.player": "TuneIn Radio",
+    "tunein.player": "TuneIn Radio",
     "com.yuriy.openradio": "Open Radio",
     "deezer.android.app": "Deezer",
     "net.programmierecke.radiodroid2": "RadioDroid 2",
@@ -593,6 +594,7 @@ class EversoloApiClient:
                 )
                 label = str(
                     app.get("label")
+                    or app.get("title")
                     or app.get("appName")
                     or app.get("name")
                     or package_name

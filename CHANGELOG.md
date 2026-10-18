@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2b2
+
+- Read an application's name from the `title` key the streaming list uses, so TuneIn Radio no longer appears as "Player" on DMP-A6 firmware v1.6.15.
+
 ## 1.0.2b1
 
 - Let `media_player.select_source` select device favorites, local playlists, and installed music apps, not only hardware inputs.
