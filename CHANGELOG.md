@@ -8,6 +8,7 @@
 - Read a missing endpoint (HTTP 404/405/501) as unsupported instead of as an unreachable device.
 - Report the active input from the device-provided index instead of its position in the list.
 - Keep the last known state through a few missed polls instead of logging an error for every timeout.
+- Pinned `wakeonlan==3.3.0`, the version Home Assistant itself depends on, which hassfest rejected as a conflict.
 - Added `scripts/probe_eversolo_api.py` to report which API endpoints a firmware serves, and listed inputs, favorites, playlists, and apps in diagnostics.
 
 ## 1.0.1b1

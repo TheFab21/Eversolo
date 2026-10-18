@@ -41,7 +41,8 @@ def test_manifest_is_modern_and_pinned() -> None:
     """Runtime metadata points at the fork and pins its sole dependency."""
     manifest = _load_json(INTEGRATION / "manifest.json")
     assert re.fullmatch(r"\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?", manifest["version"])
-    assert manifest["requirements"] == ["wakeonlan==4.0.0"]
+    # Home Assistant pins wakeonlan itself; hassfest rejects a different pin.
+    assert manifest["requirements"] == ["wakeonlan==3.3.0"]
     assert manifest["documentation"] == "https://github.com/TheFab21/Eversolo"
     assert manifest["zeroconf"] == ["_eversolo._tcp.local."]
 

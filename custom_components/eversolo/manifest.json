@@ -14,7 +14,7 @@
     "custom_components.eversolo"
   ],
   "requirements": [
-    "wakeonlan==4.0.0"
+    "wakeonlan==3.3.0"
   ],
   "version": "1.0.2b1",
   "zeroconf": [
