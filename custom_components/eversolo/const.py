@@ -14,6 +14,9 @@ SETTINGS_UPDATE_INTERVAL = 30
 # A streamer busy decoding can miss a two-second poll; keep the last state for
 # a few of them instead of flapping the entities and logging an error.
 TOLERATED_FAILED_POLLS = 3
+# Once a power-down was asked for, a missed poll is the device leaving rather
+# than a glitch to ride out, for as long as it takes to shut down.
+POWER_DOWN_SETTLE = 60
 
 DEFAULT_POWER_BEHAVIOR = "poweroff"
 POWER_BEHAVIOR_STANDBY = "standby"

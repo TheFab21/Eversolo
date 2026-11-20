@@ -318,8 +318,20 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
         await self.coordinator.async_power_off()
 
     async def async_turn_on(self) -> None:
-        """Wake the device."""
+        """Wake the device with a magic packet."""
         await self.coordinator.async_send_wol()
+
+    async def async_toggle(self) -> None:
+        """Wake a device that stopped answering, power down one that answers.
+
+        Home Assistant decides this from the reported state, which would send
+        a magic packet to a device reporting standby while it still answers
+        its API. Whether the device answers is the better question.
+        """
+        if self.coordinator.last_update_success:
+            await self.async_turn_off()
+        else:
+            await self.async_turn_on()
 
     async def async_set_volume_level(self, volume: float) -> None:
         """Set normalized volume."""

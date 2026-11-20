@@ -18,6 +18,7 @@ This fork modernizes the original [hchris1/Eversolo](https://github.com/hchris1/
 - Launch installed streaming apps and Eversolo's cross-service **My Favorites** view
 - Search the Eversolo local music library
 - Dynamic input/output lists supplied by the device—nothing is hard-coded per model
+- One power button: a device that answers is powered down, one that stopped answering is woken with a magic packet
 - Configurable power-off behavior: full shutdown or standby
 - Wake-on-LAN on the Eversolo-documented UDP port, with legacy fallback
 - Display brightness, knob brightness, VU style, spectrum style, output, and knob color controls
@@ -73,7 +74,7 @@ The media player is the primary control surface. It provides:
 - volume, step volume, mute and unmute
 - dynamic input selection, extended with favorites, playlists, and music apps
 - repeat one, repeat all, and shuffle
-- power off, configurable standby, and Wake-on-LAN
+- power off, configurable standby, and Wake-on-LAN from the same button
 - artwork and detailed audio attributes
 - queue, favorites, playlists, and search in the Home Assistant media browser
 
@@ -99,6 +100,8 @@ Open the integration menu to:
 
 - change the device host or API port without deleting the integration
 - choose whether media_player.turn_off powers down or enters standby
+
+`media_player.toggle` asks whether the device answers its API rather than reading the reported state: it powers down a device that answers, including an idle one, and sends a magic packet to one that stopped answering. Waking needs the device to advertise `ableRemoteBoot` and report a wired MAC address; without both, the player offers no turn-on.
 
 Standby is used only when the device advertises support. Otherwise, the integration safely falls back to full shutdown.
 

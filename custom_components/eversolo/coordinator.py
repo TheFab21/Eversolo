@@ -35,6 +35,7 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     LOGGER,
+    POWER_DOWN_SETTLE,
     SETTINGS_UPDATE_INTERVAL,
     TOLERATED_FAILED_POLLS,
     WOL_PORTS,
@@ -58,6 +59,7 @@ class EversoloDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._settings_data: dict[str, Any] = {}
         self._settings_refresh_at = 0.0
         self._failed_polls = 0
+        self._power_down_at: float | None = None
         self.last_realtime_update = None
         super().__init__(
             hass=hass,
@@ -151,6 +153,23 @@ class EversoloDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for option in options
         )
 
+    @property
+    def _tolerated_failed_polls(self) -> int:
+        """Return how many missed polls to ride out before reporting a loss.
+
+        None of them while the device is shutting down on request: there a
+        missed poll is the expected answer, and riding it out would leave the
+        player reporting the state it had before the power button was pressed.
+        A poll that still succeeds inside that window only means the device
+        has not gone yet, so asking it to wake is what ends the window.
+        """
+        if self._power_down_at is None:
+            return TOLERATED_FAILED_POLLS
+        if time.monotonic() - self._power_down_at <= POWER_DOWN_SETTLE:
+            return 0
+        self._power_down_at = None
+        return TOLERATED_FAILED_POLLS
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Refresh playback state quickly and settings only when due."""
         try:
@@ -159,7 +178,7 @@ class EversoloDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise ConfigEntryAuthFailed from err
         except EversoloApiClientCommunicationError as err:
             self._failed_polls += 1
-            if self.data and self._failed_polls <= TOLERATED_FAILED_POLLS:
+            if self.data and self._failed_polls <= self._tolerated_failed_polls:
                 LOGGER.debug(
                     "Keeping the last Eversolo state after %s failed poll(s): %s",
                     self._failed_polls,
@@ -192,6 +211,7 @@ class EversoloDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not net_mac:
             LOGGER.warning("No wired MAC address is available for Wake-on-LAN")
             return
+        self._power_down_at = None
         for port in WOL_PORTS:
             await self.hass.async_add_executor_job(
                 partial(send_magic_packet, net_mac, port=port)
@@ -206,6 +226,8 @@ class EversoloDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self.client.async_trigger_standby()
         else:
             await self.client.async_trigger_power_off()
+        self._power_down_at = time.monotonic()
+        await self.async_request_refresh()
 
     @property
     def diagnostics_summary(self) -> dict[str, Any]:
