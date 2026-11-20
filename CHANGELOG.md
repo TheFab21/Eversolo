@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.5b1
+
+- Decide the power button from whether the device answers its API: a device that answers is powered down, one that stopped answering is woken with Wake-on-LAN, so a reported standby no longer sends a magic packet to a device that is still up.
+- Turn the player off as soon as the device stops answering a requested shutdown, instead of holding its previous state for a few polls.
+
 ## 1.0.4b1
 
 - Name what is actually playing during a DLNA stream: the firmware leaves `playingMusic` on the station that stopped, so the live audio block is read first, and the stopped station's artwork is no longer shown.
