@@ -2,5 +2,5 @@
 # pytest-asyncio and pytest-cov to exact versions. Repeating those pins here
 # only lets a dependency bump contradict the plugin, which makes the install
 # unresolvable, so the plugin alone decides them.
-pytest-homeassistant-custom-component==0.13.346
-ruff==0.15.21
+pytest-homeassistant-custom-component==0.13.375
+ruff==0.17.3
