@@ -110,6 +110,9 @@ CANDIDATE_ENDPOINTS: tuple[tuple[str, dict[str, Any]], ...] = (
 # The internet-radio app may not live under the music prefixes at all; these
 # ask one well-known read name under other plausible service paths.
 ALTERNATE_PATHS: tuple[tuple[str, dict[str, Any]], ...] = (
+    # A nonsense namespace, as the control: whatever it answers is what an
+    # unknown service path says, so the real ones can be read against it.
+    ("/ZzzNonsenseControl/v2/getFavorites", LIST_PARAMS),
     ("/ZidooRadioControl/v2/getFavorites", LIST_PARAMS),
     ("/RadioControl/v2/getFavorites", LIST_PARAMS),
     ("/ZidooRadioControl/v2/getPlayQueue", LIST_PARAMS),
@@ -232,6 +235,22 @@ def summarize(report: dict[str, Any]) -> None:
         print("\nPlay queue — these titles are selectable with select_source:")
         for index, entry in enumerate(queue):
             print(f"  [{index}] {entry['title']}  ->  {entry['url']}")
+    control = (report["known"].get("/ZzzNonsenseControl/v2/getFavorites") or {}).get(
+        "device_status"
+    )
+    registered = [
+        path
+        for path, result in report["known"].items()
+        if result.get("device_status") in (801, "801") and "Nonsense" not in path
+    ]
+    if registered:
+        print("\nService paths answering 801 (application element not registered):")
+        for path in registered:
+            print(f"  {path}")
+        print(f"  control: a nonsense namespace answers {control!r}.")
+        print("  ^ a different answer means these namespaces are real but")
+        print("    unregistered, which can depend on the app running on screen.")
+
     existing = [
         f"{prefix}/{endpoint}"
         for endpoint, per_prefix in report["library"].items()
