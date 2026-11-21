@@ -2,6 +2,7 @@
 
 ## 1.0.5b3
 
+- Count a device status of 403 as a handler that exists, alongside 805, and print the device's own message with it. A run reported only the 805s, which hid `addLocalSongsToPlayQueue` — a handler known to exist — behind a refusal.
 - `scripts/probe_eversolo_api.py` can ask write-shaped names without parameters, behind `--probe-write-names`, to find whether a handler that plays a URL exists at all. Two names known to exist ride along as positive controls, and nothing that could act without parameters is asked.
 
 ## 1.0.5b2

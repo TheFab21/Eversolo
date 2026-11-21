@@ -291,16 +291,22 @@ def summarize(report: dict[str, Any]) -> None:
         print("  ^ a different answer means these namespaces are real but")
         print("    unregistered, which can depend on the app running on screen.")
 
+    # 805 says the handler wants parameters, 403 that it refused the action in
+    # this context. Either way the name exists, which 405 denies. A run that
+    # reported only 805 hid addLocalSongsToPlayQueue, a handler known to exist.
     existing = [
-        f"{prefix}/{endpoint}"
+        (f"{prefix}/{endpoint}", result.get("device_status"), result.get("sample"))
         for endpoint, per_prefix in report["library"].items()
         for prefix, result in per_prefix.items()
-        if result.get("device_status") in (805, "805")
+        if result.get("device_status") in (805, "805", 403, "403")
     ]
     if existing:
-        print("\nHandlers that EXIST but want parameters (device status 805):")
-        for name in existing:
-            print(f"  {name}")
+        print("\nHandlers that EXIST (805 wants parameters, 403 refused the action):")
+        for name, status, body in existing:
+            message = body.get("msg") if isinstance(body, dict) else None
+            print(f"  [{status}] {name}")
+            if message:
+                print(f"         {message}")
         print("  ^ these are the finds: an unknown name answers 405 instead.")
 
     print("\nEndpoints that answered with data:")
