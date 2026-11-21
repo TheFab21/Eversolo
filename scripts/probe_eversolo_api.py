@@ -59,6 +59,13 @@ LIBRARY_ENDPOINTS: tuple[tuple[str, dict[str, Any]], ...] = (
 
 # Candidate names for the favorites and internet-radio collections. None of
 # these is documented; the report says which ones this firmware recognizes.
+#
+# The names follow the services the device actually names in its own state and
+# icons: `musicplay_nav_rb.png` for the internet-radio app, whose station ids
+# are radio-browser UUIDs; `tuneInradio` as a streamId; and the AirAble spelling
+# of `addAirAbleMusicListToPlayQueue`, an endpoint captured from the official
+# app. Only read-shaped names are probed, so a handler that does exist is not
+# asked to change anything.
 CANDIDATE_ENDPOINTS: tuple[tuple[str, dict[str, Any]], ...] = (
     ("getCollectList", LIST_PARAMS),
     ("getCollectionList", LIST_PARAMS),
@@ -71,6 +78,43 @@ CANDIDATE_ENDPOINTS: tuple[tuple[str, dict[str, Any]], ...] = (
     ("getInternetRadioList", LIST_PARAMS),
     ("getWebRadioList", LIST_PARAMS),
     ("getTuneinFavoriteList", LIST_PARAMS),
+    # The internet-radio app, which the device calls "rb".
+    ("getRbList", LIST_PARAMS),
+    ("getRbFavorites", LIST_PARAMS),
+    ("getRbFavoriteList", LIST_PARAMS),
+    ("getRbStationList", LIST_PARAMS),
+    ("getRbMusicList", LIST_PARAMS),
+    ("getRadioBrowserList", LIST_PARAMS),
+    ("getRadioBrowserFavorites", LIST_PARAMS),
+    # The AirAble family, after addAirAbleMusicListToPlayQueue.
+    ("getAirAbleList", LIST_PARAMS),
+    ("getAirAbleMusicList", LIST_PARAMS),
+    ("getAirAbleFavorites", LIST_PARAMS),
+    ("getAirAbleFavoriteList", LIST_PARAMS),
+    ("getAirAblePlayList", LIST_PARAMS),
+    ("getAirAbleRadioList", LIST_PARAMS),
+    ("getAirableList", LIST_PARAMS),
+    ("getAirableFavoriteList", LIST_PARAMS),
+    # TuneIn, which the state calls tuneInradio.
+    ("getTuneInList", LIST_PARAMS),
+    ("getTuneInFavorites", LIST_PARAMS),
+    ("getTuneInRadioList", LIST_PARAMS),
+    # Station and custom-station wording seen in the device's own menus.
+    ("getStationList", LIST_PARAMS),
+    ("getFavoriteStationList", LIST_PARAMS),
+    ("getCustomRadioList", LIST_PARAMS),
+    ("getLocalRadioList", LIST_PARAMS),
+    ("getMyRadioList", LIST_PARAMS),
+)
+
+# The internet-radio app may not live under the music prefixes at all; these
+# ask one well-known read name under other plausible service paths.
+ALTERNATE_PATHS: tuple[tuple[str, dict[str, Any]], ...] = (
+    ("/ZidooRadioControl/v2/getFavorites", LIST_PARAMS),
+    ("/RadioControl/v2/getFavorites", LIST_PARAMS),
+    ("/ZidooRadioControl/v2/getPlayQueue", LIST_PARAMS),
+    ("/ZidooMusicControl/v2/getRadioFavorites", LIST_PARAMS),
+    ("/MusicControl/v2/getRadioFavorites", LIST_PARAMS),
 )
 
 
@@ -172,6 +216,10 @@ def probe(host: str, port: int, timeout: float) -> dict[str, Any]:
             prefix: run(f"{prefix}/{endpoint}", params) for prefix in LIBRARY_PREFIXES
         }
 
+    print("Alternate service paths:")
+    for path, params in ALTERNATE_PATHS:
+        report["known"][path] = run(path, params)
+
     print("Play queue (full):")
     report["play_queue"] = collect_play_queue(base, timeout)
     return report
@@ -184,6 +232,18 @@ def summarize(report: dict[str, Any]) -> None:
         print("\nPlay queue — these titles are selectable with select_source:")
         for index, entry in enumerate(queue):
             print(f"  [{index}] {entry['title']}  ->  {entry['url']}")
+    existing = [
+        f"{prefix}/{endpoint}"
+        for endpoint, per_prefix in report["library"].items()
+        for prefix, result in per_prefix.items()
+        if result.get("device_status") in (805, "805")
+    ]
+    if existing:
+        print("\nHandlers that EXIST but want parameters (device status 805):")
+        for name in existing:
+            print(f"  {name}")
+        print("  ^ these are the finds: an unknown name answers 405 instead.")
+
     print("\nEndpoints that answered with data:")
     for path, result in report["known"].items():
         if result.get("http_status") == 200:

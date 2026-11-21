@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.5b2
+
+- `scripts/probe_eversolo_api.py` now reports the handlers that answer device status 805, which means the name exists and wants parameters, where an unknown name answers 405. That distinction is what tells a real endpoint from a guess.
+- Added read-shaped candidate names for the services the device names itself: the internet-radio app it calls `rb`, whose station ids are radio-browser UUIDs, the AirAble family behind `addAirAbleMusicListToPlayQueue`, and TuneIn. Alternate service paths are probed too.
+
 ## 1.0.5b1
 
 - Decide the power button from whether the device answers its API: a device that answers is powered down, one that stopped answering is woken with Wake-on-LAN, so a reported standby no longer sends a magic packet to a device that is still up.
