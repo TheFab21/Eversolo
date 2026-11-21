@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5b3
+
+- `scripts/probe_eversolo_api.py` can ask write-shaped names without parameters, behind `--probe-write-names`, to find whether a handler that plays a URL exists at all. Two names known to exist ride along as positive controls, and nothing that could act without parameters is asked.
+
 ## 1.0.5b2
 
 - `scripts/probe_eversolo_api.py` now reports the handlers that answer device status 805, which means the name exists and wants parameters, where an unknown name answers 405. That distinction is what tells a real endpoint from a guess.
