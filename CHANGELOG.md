@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.5b2
+
+- `scripts/probe_eversolo_api.py` now reports the handlers that answer device status 805, which means the name exists and wants parameters, where an unknown name answers 405. That distinction is what tells a real endpoint from a guess.
+- Keep every play-queue entry in the probe's report. The queue was read through the same sampler that trims a list to three items to keep the report readable, so a device reporting eight stations was written down as three, and that list is the point of the run.
+- Probe a nonsense service namespace as a control, so an answer of 801 ("the application element is not registered") on the radio namespaces can be read against what an unknown namespace says.
+- Added read-shaped candidate names for the services the device names itself: the internet-radio app it calls `rb`, whose station ids are radio-browser UUIDs, the AirAble family behind `addAirAbleMusicListToPlayQueue`, and TuneIn. Alternate service paths are probed too.
+
 ## 1.0.5b1
 
 - Decide the power button from whether the device answers its API: a device that answers is powered down, one that stopped answering is woken with Wake-on-LAN, so a reported standby no longer sends a magic packet to a device that is still up.
