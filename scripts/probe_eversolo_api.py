@@ -121,7 +121,7 @@ ALTERNATE_PATHS: tuple[tuple[str, dict[str, Any]], ...] = (
 )
 
 
-def request(url: str, timeout: float) -> dict[str, Any]:
+def request(url: str, timeout: float, sample_limit: int = 3) -> dict[str, Any]:
     """Fetch one endpoint and summarize its answer."""
     try:
         with OPENER.open(url, timeout=timeout) as response:
@@ -148,21 +148,26 @@ def request(url: str, timeout: float) -> dict[str, Any]:
     if isinstance(decoded, dict):
         result["device_status"] = decoded.get("status")
         result["keys"] = sorted(decoded)
-    result["sample"] = sample(decoded)
+    result["sample"] = sample(decoded, sample_limit)
     return result
 
 
-def sample(decoded: Any) -> Any:
-    """Keep a readable slice of a response instead of the whole library."""
+def sample(decoded: Any, limit: int = 3) -> Any:
+    """Keep a readable slice of a response instead of the whole library.
+
+    `limit` is how many items of a list survive. The play queue is read with
+    a limit high enough to keep every station, because that list is the point
+    of the run rather than an illustration of one.
+    """
     if isinstance(decoded, list):
-        return [sample(item) for item in decoded[:3]]
+        return [sample(item, limit) for item in decoded[:limit]]
     if not isinstance(decoded, dict):
         return decoded
     return {
         key: (
-            [sample(item) for item in value[:3]]
+            [sample(item, limit) for item in value[:limit]]
             if isinstance(value, list)
-            else sample(value)
+            else sample(value, limit)
             if isinstance(value, dict)
             else value
         )
@@ -179,7 +184,9 @@ def collect_play_queue(base: str, timeout: float) -> list[dict[str, Any]]:
     """
     for prefix in LIBRARY_PREFIXES:
         result = request(
-            f"{base}{prefix}/getPlayQueue?start=0&count=200&sort=0", timeout
+            f"{base}{prefix}/getPlayQueue?start=0&count=200&sort=0",
+            timeout,
+            sample_limit=500,
         )
         if result.get("http_status") != 200:
             continue
