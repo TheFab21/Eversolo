@@ -8,13 +8,14 @@ import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_URL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.util import dt as dt_util
 from wakeonlan import send_magic_packet
+from yarl import URL
 
 from .api import (
     EversoloApiClient,
@@ -40,6 +41,9 @@ from .const import (
     TOLERATED_FAILED_POLLS,
     WOL_PORTS,
 )
+from .dlna import RENDERER_SEARCH_TARGETS
+
+DLNA_DMR_DOMAIN = "dlna_dmr"
 
 
 class EversoloDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -228,6 +232,38 @@ class EversoloDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self.client.async_trigger_power_off()
         self._power_down_at = time.monotonic()
         await self.async_request_refresh()
+
+    async def async_dlna_locations(self) -> list[str]:
+        """Return the DLNA description URLs Home Assistant knows for this device.
+
+        The SSDP cache comes first: Home Assistant refreshes it whenever the
+        device announces itself, so it follows the renderer when its port
+        changes. The URL stored by Home Assistant's dlna_dmr integration is
+        the fallback, for when the cache has not heard from the device yet.
+        """
+        # Imported here: the module needs async-upnp-client, which Home
+        # Assistant installs for ssdp, a declared dependency, before this runs.
+        from homeassistant.components import ssdp
+
+        candidates: list[str | None] = []
+        for target in RENDERER_SEARCH_TARGETS:
+            candidates.extend(
+                info.ssdp_location
+                for info in await ssdp.async_get_discovery_info_by_st(self.hass, target)
+            )
+        candidates.extend(
+            entry.data.get(CONF_URL)
+            for entry in self.hass.config_entries.async_entries(DLNA_DMR_DOMAIN)
+        )
+        locations: list[str] = []
+        for location in candidates:
+            if (
+                location
+                and location not in locations
+                and URL(location).host == self.client.host
+            ):
+                locations.append(location)
+        return locations
 
     @property
     def diagnostics_summary(self) -> dict[str, Any]:

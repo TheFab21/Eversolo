@@ -107,6 +107,30 @@ CANDIDATE_ENDPOINTS: tuple[tuple[str, dict[str, Any]], ...] = (
     ("getMyRadioList", LIST_PARAMS),
 )
 
+# Write-shaped names, asked WITHOUT parameters and only with --probe-write-names.
+# A handler that requires parameters answers 805 and does nothing, which is how
+# addAirAbleMusicListToPlayQueue was found; a handler that acts without them
+# would act, so nothing here may clear, remove, reset or power anything. The
+# first two are known to exist and serve as positive controls: if they do not
+# answer 805, the run proves nothing about the others.
+WRITE_CANDIDATES: tuple[str, ...] = (
+    "addAirAbleMusicListToPlayQueue",
+    "addLocalSongsToPlayQueue",
+    "addMusicToPlayQueue",
+    "addMusicsToPlayQueue",
+    "addUrlToPlayQueue",
+    "addWebMusicToPlayQueue",
+    "addStreamToPlayQueue",
+    "addRadioToPlayQueue",
+    "playUrl",
+    "playWebMusic",
+    "playStream",
+    "playMusicByUrl",
+    "playWebUrl",
+    "openUrl",
+    "setPlayUrl",
+)
+
 # The internet-radio app may not live under the music prefixes at all; these
 # ask one well-known read name under other plausible service paths.
 ALTERNATE_PATHS: tuple[tuple[str, dict[str, Any]], ...] = (
@@ -206,7 +230,9 @@ def collect_play_queue(base: str, timeout: float) -> list[dict[str, Any]]:
     return []
 
 
-def probe(host: str, port: int, timeout: float) -> dict[str, Any]:
+def probe(
+    host: str, port: int, timeout: float, write_names: bool = False
+) -> dict[str, Any]:
     """Probe every endpoint and group the results by category."""
     base = f"http://{host}:{port}"
 
@@ -229,6 +255,13 @@ def probe(host: str, port: int, timeout: float) -> dict[str, Any]:
     print("Alternate service paths:")
     for path, params in ALTERNATE_PATHS:
         report["known"][path] = run(path, params)
+
+    if write_names:
+        print("Write-shaped names, asked without parameters:")
+        for endpoint in WRITE_CANDIDATES:
+            report["library"][endpoint] = {
+                prefix: run(f"{prefix}/{endpoint}", {}) for prefix in LIBRARY_PREFIXES
+            }
 
     print("Play queue (full):")
     report["play_queue"] = collect_play_queue(base, timeout)
@@ -258,16 +291,22 @@ def summarize(report: dict[str, Any]) -> None:
         print("  ^ a different answer means these namespaces are real but")
         print("    unregistered, which can depend on the app running on screen.")
 
+    # 805 says the handler wants parameters, 403 that it refused the action in
+    # this context. Either way the name exists, which 405 denies. A run that
+    # reported only 805 hid addLocalSongsToPlayQueue, a handler known to exist.
     existing = [
-        f"{prefix}/{endpoint}"
+        (f"{prefix}/{endpoint}", result.get("device_status"), result.get("sample"))
         for endpoint, per_prefix in report["library"].items()
         for prefix, result in per_prefix.items()
-        if result.get("device_status") in (805, "805")
+        if result.get("device_status") in (805, "805", 403, "403")
     ]
     if existing:
-        print("\nHandlers that EXIST but want parameters (device status 805):")
-        for name in existing:
-            print(f"  {name}")
+        print("\nHandlers that EXIST (805 wants parameters, 403 refused the action):")
+        for name, status, body in existing:
+            message = body.get("msg") if isinstance(body, dict) else None
+            print(f"  [{status}] {name}")
+            if message:
+                print(f"         {message}")
         print("  ^ these are the finds: an unknown name answers 405 instead.")
 
     print("\nEndpoints that answered with data:")
@@ -294,9 +333,18 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=9529, help="API port (9529)")
     parser.add_argument("--timeout", type=float, default=5.0, help="Request timeout")
     parser.add_argument("--output", help="Write the full JSON report to this file")
+    parser.add_argument(
+        "--probe-write-names",
+        action="store_true",
+        help=(
+            "also ask write-shaped names without parameters, to see which exist. "
+            "A handler needing parameters answers 805 and does nothing; one that "
+            "does not could act, so this is off by default."
+        ),
+    )
     args = parser.parse_args()
 
-    report = probe(args.host, args.port, args.timeout)
+    report = probe(args.host, args.port, args.timeout, args.probe_write_names)
     summarize(report)
 
     if args.output:

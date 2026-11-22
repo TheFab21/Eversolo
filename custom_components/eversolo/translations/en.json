@@ -79,7 +79,13 @@
       "message": "Could not select {source} on this Eversolo: {error}"
     },
     "media_id_not_supported": {
-      "message": "This Eversolo plays items from its own library, queue and apps, not the media identifier {media_id}. Pick an item from the media browser, or select it by name with media_player.select_source."
+      "message": "This Eversolo plays stream URLs (http or https) and items from its own library, queue and apps, not the media identifier {media_id}. Pick an item from the media browser, or select it by name with media_player.select_source."
+    },
+    "dlna_renderer_not_found": {
+      "message": "Home Assistant has not discovered the DLNA renderer of the Eversolo at {host}. Check that the Eversolo is on; the DLNA Digital Media Renderer integration helps Home Assistant find it."
+    },
+    "dlna_play_failed": {
+      "message": "The Eversolo's DLNA renderer did not play {url}: {error}"
     }
   }
 }

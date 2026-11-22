@@ -3,4 +3,7 @@
 # only lets a dependency bump contradict the plugin, which makes the install
 # unresolvable, so the plugin alone decides them.
 pytest-homeassistant-custom-component==0.13.375
+# The integration's own runtime requirement, with the manifest's floor: tests
+# that import the integration need it, and the plugin does not install it.
+wakeonlan>=3.3.0
 ruff==0.17.3

@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-addopts = "--strict-config --strict-markers --cov=_eversolo_api_tests.api --cov-report=term-missing"
+addopts = "--strict-config --strict-markers --cov=_eversolo_api_tests.api --cov=_eversolo_dlna_tests --cov-report=term-missing"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
