@@ -19,7 +19,7 @@
   "requirements": [
     "wakeonlan>=3.3.0"
   ],
-  "version": "1.2.5",
+  "version": "1.2.6",
   "zeroconf": [
     "_eversolo._tcp.local."
   ]
