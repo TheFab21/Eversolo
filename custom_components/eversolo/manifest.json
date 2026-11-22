@@ -6,6 +6,9 @@
     "@hchris1"
   ],
   "config_flow": true,
+  "dependencies": [
+    "ssdp"
+  ],
   "documentation": "https://github.com/TheFab21/Eversolo",
   "integration_type": "device",
   "iot_class": "local_polling",

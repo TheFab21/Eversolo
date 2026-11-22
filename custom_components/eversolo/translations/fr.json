@@ -79,7 +79,13 @@
       "message": "Impossible de sélectionner {source} sur cet Eversolo : {error}"
     },
     "media_id_not_supported": {
-      "message": "Cet Eversolo lit les éléments de sa bibliothèque, de sa file et de ses applications, pas l’identifiant {media_id}. Choisissez un élément dans le navigateur multimédia, ou sélectionnez-le par son nom avec media_player.select_source."
+      "message": "Cet Eversolo lit les adresses de flux (http ou https) et les éléments de sa bibliothèque, de sa file et de ses applications, pas l’identifiant {media_id}. Choisissez un élément dans le navigateur multimédia, ou sélectionnez-le par son nom avec media_player.select_source."
+    },
+    "dlna_renderer_not_found": {
+      "message": "Home Assistant n’a pas découvert le lecteur DLNA de l’Eversolo à l’adresse {host}. Vérifiez que l’Eversolo est allumé ; l’intégration DLNA Digital Media Renderer aide Home Assistant à le trouver."
+    },
+    "dlna_play_failed": {
+      "message": "Le lecteur DLNA de l’Eversolo n’a pas lu {url} : {error}"
     }
   }
 }

@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 from homeassistant.components.media_player import (
+    ATTR_MEDIA_EXTRA,
     BrowseError,
     BrowseMedia,
     MediaClass,
@@ -25,11 +26,15 @@ from homeassistant.components.media_player import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import EversoloApiClientError
 from .coordinator import EversoloDataUpdateCoordinator
+from .dlna import EversoloDlnaError, async_play_stream
 from .entity import EversoloEntity
+
+STREAM_URL_SCHEMES = ("http://", "https://")
 
 BASE_FEATURES = (
     MediaPlayerEntityFeature.TURN_OFF
@@ -516,8 +521,11 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
         announce: bool | None = None,
         **kwargs: Any,
     ) -> None:
-        """Play a queue, favorite, search, or playlist item."""
-        del media_type, enqueue, announce, kwargs
+        """Play a stream URL, or a queue, favorite, search, or playlist item."""
+        del media_type, enqueue, announce
+        if isinstance(media_id, str) and media_id.startswith(STREAM_URL_SCHEMES):
+            await self._async_play_stream(media_id, kwargs.get(ATTR_MEDIA_EXTRA) or {})
+            return
         try:
             request = self._decode_media_id(media_id)
         except (TypeError, ValueError) as err:
@@ -543,6 +551,40 @@ class EversoloMediaPlayer(EversoloEntity, MediaPlayerEntity):
                 )
         except (EversoloApiClientError, KeyError, TypeError, ValueError) as err:
             raise HomeAssistantError(f"Could not play Eversolo media: {err}") from err
+        await self.coordinator.async_request_refresh()
+
+    async def _async_play_stream(self, url: str, extra: Mapping[str, Any]) -> None:
+        """Play a stream through the device's DLNA renderer, as a radio station.
+
+        The title and logo come from the call's ``extra``, under the keys Home
+        Assistant's own DLNA integration reads: ``title`` and ``thumb``. Every
+        description URL Home Assistant knows for the device is tried in turn,
+        so an address left stale by a port change does not stop the call.
+        """
+        title = str(extra.get("title") or url)
+        logo = str(extra["thumb"]) if extra.get("thumb") else None
+        locations = await self.coordinator.async_dlna_locations()
+        if not locations:
+            raise HomeAssistantError(
+                translation_domain="eversolo",
+                translation_key="dlna_renderer_not_found",
+                translation_placeholders={"host": self.coordinator.client.host},
+            )
+        session = async_get_clientsession(self.hass)
+        errors: list[str] = []
+        for location in locations:
+            try:
+                await async_play_stream(session, location, url, title, logo)
+            except EversoloDlnaError as err:
+                errors.append(str(err))
+                continue
+            break
+        else:
+            raise HomeAssistantError(
+                translation_domain="eversolo",
+                translation_key="dlna_play_failed",
+                translation_placeholders={"url": url, "error": "; ".join(errors)},
+            )
         await self.coordinator.async_request_refresh()
 
     async def async_get_browse_image(
